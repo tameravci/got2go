@@ -1,0 +1,129 @@
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%; /* Ensure full height */
+    overflow: hidden; /* Prevent scrollbars from flex layout */
+}
+
+body {
+    font-family: sans-serif;
+    display: flex; /* Use flexbox for main layout */
+    flex-direction: row; /* Explicitly set flex direction */
+}
+
+#sidebar {
+    width: 300px; /* Fixed width for sidebar */
+    background-color: #f8f8f8;
+    padding: 20px;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    overflow-y: auto; /* Enable scrolling for long lists */
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0; /* Prevent sidebar from shrinking */
+    transition: width 0.3s ease-in-out; /* Smooth transition for width */
+}
+
+#sidebar h1 {
+    text-align: center;
+    color: #333;
+    margin-top: 0;
+    margin-bottom: 20px;
+}
+
+#map {
+    flex-grow: 1; /* Map takes remaining space */
+    height: 100%; /* Ensure map takes full height of its flex parent */
+}
+
+.search-container {
+    display: flex;
+    margin-bottom: 20px;
+}
+
+#search-input {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px 0 0 4px;
+}
+
+#search-button {
+    padding: 8px 12px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 0 4px 4px 0;
+    cursor: pointer;
+}
+
+#search-button:hover {
+    background-color: #0056b3;
+}
+
+.shop-list-item {
+    padding: 10px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.shop-list-item:hover {
+    background-color: #e9e9e9;
+}
+
+.leaflet-popup-content-wrapper {
+    border-radius: 5px;
+}
+.leaflet-popup-content {
+    margin: 15px;
+}
+.leaflet-popup-content h5 {
+    margin-top: 15px;
+    margin-bottom: 10px; /* Increased bottom margin */
+}
+.leaflet-popup-content div {
+    margin-bottom: 5px;
+}
+.leaflet-popup-content button {
+    margin-left: 5px;
+}
+.leaflet-popup-content input {
+    flex-grow: 1;
+    margin-right: 5px;
+    padding-left: 5px; /* Add some padding to the left */
+}
+
+.suggestion-form {
+    display: flex;
+    align-items: center;
+    margin-top: 0; /* Removed top margin */
+}
+
+.leaflet-popup-content button.voted-up {
+    border: 2px solid #007bff;
+    background-color: #e0f0ff;
+}
+
+.leaflet-popup-content button.voted-down {
+    border: 2px solid #dc3545;
+    background-color: #ffe0e3;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column; /* Stack sidebar and map vertically */
+    }
+
+    #sidebar {
+        width: 100%; /* Sidebar takes full width */
+        height: 200px; /* Fixed height for sidebar on mobile */
+        padding: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    #map {
+        height: calc(100% - 200px); /* Map takes remaining height */
+    }
+}
