@@ -76,6 +76,11 @@ document.addEventListener('DOMContentLoaded', function () {
         shopsToDisplay.forEach(function (shop) {
             var marker = L.marker([shop.lat, shop.lng]);
             marker.bindPopup(createPopupContent(shop));
+            marker.on('popupopen', function (e) {
+                var currentZoom = map.getZoom();
+                var offset = 0.006 * Math.pow(2, (13 - currentZoom)); // Adjust 0.006 and 13 as needed
+                map.panTo([e.popup.getLatLng().lat + offset, e.popup.getLatLng().lng]);
+            });
             markers.addLayer(marker);
 
             // Add to sidebar list
@@ -83,8 +88,16 @@ document.addEventListener('DOMContentLoaded', function () {
             listItem.className = 'shop-list-item';
             listItem.innerHTML = `<b>${shop.name}</b><br><small>${shop.address}</small>`;
             listItem.onclick = function() {
-                map.setView([shop.lat, shop.lng], 16); // Pan to shop and zoom in
+                var targetZoom = 16;
+                var offset = 0.006 * Math.pow(2, (13 - targetZoom)); // Use the same formula
+                map.setView([shop.lat + offset, shop.lng], targetZoom);
                 marker.openPopup();
+                // Collapse sidebar if open
+                var sidebar = document.getElementById('sidebar');
+                if (sidebar.classList.contains('sidebar-open')) {
+                    sidebar.classList.remove('sidebar-open');
+                    map.invalidateSize(); // Invalidate map size after sidebar toggle
+                }
             };
             shopListDiv.appendChild(listItem);
         });
@@ -108,6 +121,12 @@ document.addEventListener('DOMContentLoaded', function () {
             shop.address.toLowerCase().includes(searchTerm)
         );
         displayCoffeeShops(filteredShops);
+    });
+
+    // Toggle sidebar on mobile
+    document.getElementById('toggle-sidebar-header').addEventListener('click', function() {
+        document.getElementById('sidebar').classList.toggle('sidebar-open');
+        map.invalidateSize(); // Invalidate map size after sidebar toggle
     });
 });
 

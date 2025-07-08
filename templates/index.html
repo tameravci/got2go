@@ -8,15 +8,20 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div id="sidebar">
-        <h1>Seattle Coffee Compass</h1>
-        <div class="search-container">
-            <input type="text" id="search-input" placeholder="Search coffee shops...">
-            <button id="search-button">Search</button>
+    <header id="main-header">
+        <button id="toggle-sidebar-header" class="sidebar-toggle-header">☰</button>
+        <h1>Coffee Codebook</h1>
+    </header>
+    <div id="content-container">
+        <div id="sidebar">
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Search coffee shops...">
+                <button id="search-button">Search</button>
+            </div>
+            <div id="shop-list"></div>
         </div>
-        <div id="shop-list"></div>
+        <div id="map"></div>
     </div>
-    <div id="map"></div>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

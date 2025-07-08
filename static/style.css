@@ -8,7 +8,30 @@ html, body {
 body {
     font-family: sans-serif;
     display: flex; /* Use flexbox for main layout */
-    flex-direction: row; /* Explicitly set flex direction */
+    flex-direction: column; /* Stack header and content vertically */
+}
+
+#main-header {
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Center the title */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    position: relative; /* For positioning the toggle button */
+    z-index: 1002; /* Ensure header is on top */
+}
+
+#main-header h1 {
+    margin: 0;
+    font-size: 24px;
+}
+
+#content-container {
+    display: flex;
+    flex-grow: 1; /* Take remaining vertical space */
+    flex-direction: row; /* Sidebar and map side-by-side */
 }
 
 #sidebar {
@@ -112,18 +135,59 @@ body {
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
-    body {
+    #content-container {
         flex-direction: column; /* Stack sidebar and map vertically */
     }
 
     #sidebar {
-        width: 100%; /* Sidebar takes full width */
-        height: 200px; /* Fixed height for sidebar on mobile */
+        width: 80%; /* Sidebar takes full width */
+        height: 100%; /* Full height */
         padding: 10px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        position: fixed; /* Position sidebar fixed */
+        top: 0; /* Align to top */
+        left: -80%; /* Hide sidebar by default */
+        z-index: 1000; /* Ensure sidebar is above map */
+        transition: left 0.3s ease-in-out; /* Smooth transition for sliding */
+    }
+
+    #sidebar.sidebar-open {
+        left: 0; /* Slide in sidebar */
     }
 
     #map {
-        height: calc(100% - 200px); /* Map takes remaining height */
+        height: 100%; /* Map takes full height */
+        width: 100%;
+    }
+
+    .sidebar-toggle-header {
+        display: block; /* Show toggle button on mobile */
+        position: absolute;
+        top: 50%;
+        left: 10px;
+        transform: translateY(-50%);
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 20px;
+    }
+
+    /* Adjust Leaflet zoom control position */
+    .leaflet-control-zoom {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        top: auto !important;
+        left: auto !important;
+    }
+}
+
+/* Hide toggle button on larger screens */
+@media (min-width: 769px) {
+    .sidebar-toggle-header {
+        display: none;
     }
 }
