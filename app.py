@@ -1,8 +1,13 @@
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, session, make_response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import os
+import uuid
+
+app = Flask(__name__)
+CORS(app)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a_very_secret_key_that_should_be_in_env_vars')
 
 app = Flask(__name__)
 CORS(app)
@@ -14,6 +19,12 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+def get_or_set_user_id():
+    user_id = request.cookies.get('user_id')
+    if not user_id:
+        user_id = str(uuid.uuid4())
+    return user_id
 
 # Define Models
 class CoffeeShop(db.Model):
@@ -76,6 +87,8 @@ votes_db = {}
 
 @app.route('/api/coffee_shops', methods=['GET'])
 def get_coffee_shops():
+    user_id = request.cookies.get('user_id', 'N/A')
+    print(f"API Call: /api/coffee_shops - IP: {request.remote_addr}, User ID Cookie: {user_id}")
     coffee_shops = CoffeeShop.query.all()
     return jsonify([shop.to_dict() for shop in coffee_shops])
 
@@ -89,8 +102,17 @@ def vote():
     shop_id = data['shop_id']
     item_type = data['item_type']
     vote_type = data['vote_type']
+    
+    user_id = get_or_set_user_id()
     user_ip = request.remote_addr
+    user_identifier = f"{user_ip}_{user_id}"
+    
     item_id = data.get('item_id')
+
+    print(f"API Call: /api/vote - IP: {request.remote_addr}, User ID Cookie: {user_id}")
+    print(f"Voting for shop {shop_id} with item type {item_type} and vote type {vote_type}")
+    print(f"User Identifier: {user_identifier}")
+    print(f"Item ID: {item_id}")
 
     shop = CoffeeShop.query.get(shop_id)
     if not shop:
@@ -108,7 +130,7 @@ def vote():
         return jsonify({"error": "Item not found"}), 404
 
     if vote_type == 'upvote':
-        vote_prefix = f"{user_ip}_{shop_id}_{item_type}_"
+        vote_prefix = f"{user_identifier}_{shop_id}_{item_type}_"
         for key, value in list(votes_db.items()):
             if key.startswith(vote_prefix) and value == 'upvote':
                 existing_item_id_str = key.split('_')[-1]
@@ -120,7 +142,7 @@ def vote():
                             old_item.votes -= 1
                         del votes_db[key]
 
-    vote_key = f"{user_ip}_{shop_id}_{item_type}_{item_id}"
+    vote_key = f"{user_identifier}_{shop_id}_{item_type}_{item_id}"
     previous_vote = votes_db.get(vote_key)
 
     if previous_vote == vote_type:
@@ -146,7 +168,10 @@ def vote():
         votes_db[vote_key] = vote_type
 
     db.session.commit()
-    return jsonify(shop.to_dict())
+    
+    response = jsonify(shop.to_dict())
+    response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
+    return response
 
 @app.route('/api/suggest', methods=['POST'])
 def suggest():
@@ -154,7 +179,12 @@ def suggest():
     shop_id = data['shop_id']
     item_type = data['item_type']
     item_value = data['item_value']
+    
+    user_id = get_or_set_user_id()
     user_ip = request.remote_addr
+    user_identifier = f"{user_ip}_{user_id}"
+
+    print(f"API Call: /api/suggest - IP: {request.remote_addr}, User ID Cookie: {user_id}")
 
     shop = CoffeeShop.query.get(shop_id)
     if not shop:
@@ -172,7 +202,7 @@ def suggest():
     if existing_item and existing_item.votes > 0:
         return jsonify({"error": "This suggestion is already active."}), 409
 
-    vote_prefix = f"{user_ip}_{shop_id}_{item_type}_"
+    vote_prefix = f"{user_identifier}_{shop_id}_{item_type}_"
     for key, value in list(votes_db.items()):
         if key.startswith(vote_prefix) and value == 'upvote':
             existing_item_id_str = key.split('_')[-1]
@@ -197,7 +227,7 @@ def suggest():
     
     db.session.commit()
 
-    vote_key = f"{user_ip}_{shop_id}_{item_type}_{new_item.id}"
+    vote_key = f"{user_identifier}_{shop_id}_{item_type}_{new_item.id}"
     votes_db[vote_key] = 'upvote'
 
     db.session.refresh(shop)
@@ -206,7 +236,9 @@ def suggest():
         "shop": shop.to_dict(),
         "newItemId": new_item.id
     }
-    return jsonify(response_data)
+    response = jsonify(response_data)
+    response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
+    return response
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5010)
+    app.run(debug=True, host='0.0.0.0', port=8080)

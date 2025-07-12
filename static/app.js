@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://tameravci.tplinkdns.com:5010';
+const API_BASE_URL = 'http://tameravci.tplinkdns.com:8080';
 let allCoffeeShops = [];
 let markers;
 let map;
