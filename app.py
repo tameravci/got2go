@@ -119,7 +119,7 @@ def vote():
                 found_item.votes += 1
             del votes_db[vote_key]
             db.session.commit()
-            return jsonify({"message": "Vote undone"})
+            return jsonify(shop.to_dict())
         else: # Different vote type, prevent changing vote directly
             return jsonify({"error": "You have already voted on this item. Please undo your previous vote first."}), 429
     else: # No previous vote, proceed with new vote
@@ -129,7 +129,7 @@ def vote():
             found_item.votes -= 1
         votes_db[vote_key] = vote_type
         db.session.commit()
-        return jsonify({"message": "Vote recorded"})
+        return jsonify(shop.to_dict())
 
 @app.route('/api/suggest', methods=['POST'])
 def suggest():
@@ -137,6 +137,7 @@ def suggest():
     shop_id = data['shop_id']
     item_type = data['item_type']
     item_value = data['item_value']
+    user_ip = request.remote_addr
 
     shop = CoffeeShop.query.get(shop_id)
     if not shop:
@@ -159,7 +160,18 @@ def suggest():
 
     db.session.add(new_item)
     db.session.commit()
-    return jsonify({"message": "Suggestion added"})
+
+    # Automatically register an upvote from the suggester
+    vote_key = f"{user_ip}_{shop_id}_{item_type}_{item_value}"
+    votes_db[vote_key] = 'upvote'
+
+    db.session.refresh(shop) # Refresh the shop to get the new item in the list
+
+    response_data = {
+        "shop": shop.to_dict(),
+        "newItemId": new_item.id
+    }
+    return jsonify(response_data)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5010)
