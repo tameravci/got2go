@@ -87,49 +87,66 @@ def index():
 def vote():
     data = request.get_json()
     shop_id = data['shop_id']
-    item_type = data['item_type'] # 'wifi_passwords' or 'bathroom_codes'
-    item_value = data['item_value']
-    vote_type = data['vote_type'] # 'upvote' or 'downvote'
+    item_type = data['item_type']
+    vote_type = data['vote_type']
     user_ip = request.remote_addr
-
-    vote_key = f"{user_ip}_{shop_id}_{item_type}_{item_value}"
+    item_id = data.get('item_id')
 
     shop = CoffeeShop.query.get(shop_id)
     if not shop:
         return jsonify({"error": "Shop not found"}), 404
 
     if item_type == 'wifi_passwords':
-        item_list = shop.wifi_passwords
-        found_item = next((item for item in item_list if item.password == item_value), None)
+        Model = WifiPassword
     elif item_type == 'bathroom_codes':
-        item_list = shop.bathroom_codes
-        found_item = next((item for item in item_list if item.code == item_value), None)
+        Model = BathroomCode
     else:
         return jsonify({"error": "Invalid item type"}), 400
-
+    
+    found_item = Model.query.get(item_id)
     if not found_item:
         return jsonify({"error": "Item not found"}), 404
 
-    # Check if user has already voted on this item
-    if vote_key in votes_db:
-        if votes_db[vote_key] == vote_type: # Same vote type, so it's an undo
-            if vote_type == 'upvote':
-                found_item.votes -= 1
-            else:
-                found_item.votes += 1
-            del votes_db[vote_key]
-            db.session.commit()
-            return jsonify(shop.to_dict())
-        else: # Different vote type, prevent changing vote directly
-            return jsonify({"error": "You have already voted on this item. Please undo your previous vote first."}), 429
-    else: # No previous vote, proceed with new vote
+    if vote_type == 'upvote':
+        vote_prefix = f"{user_ip}_{shop_id}_{item_type}_"
+        for key, value in list(votes_db.items()):
+            if key.startswith(vote_prefix) and value == 'upvote':
+                existing_item_id_str = key.split('_')[-1]
+                if existing_item_id_str.isdigit():
+                    existing_item_id = int(existing_item_id_str)
+                    if existing_item_id != item_id:
+                        old_item = Model.query.get(existing_item_id)
+                        if old_item:
+                            old_item.votes -= 1
+                        del votes_db[key]
+
+    vote_key = f"{user_ip}_{shop_id}_{item_type}_{item_id}"
+    previous_vote = votes_db.get(vote_key)
+
+    if previous_vote == vote_type:
+        # Undo vote
+        if vote_type == 'upvote':
+            found_item.votes -= 1
+        else: # downvote
+            found_item.votes += 1
+        del votes_db[vote_key]
+    elif previous_vote:
+        # Change vote
+        if vote_type == 'upvote': # Was a downvote, now an upvote
+            found_item.votes += 2
+        else: # Was an upvote, now a downvote
+            found_item.votes -= 2
+        votes_db[vote_key] = vote_type
+    else:
+        # New vote
         if vote_type == 'upvote':
             found_item.votes += 1
-        else:
+        else: # downvote
             found_item.votes -= 1
         votes_db[vote_key] = vote_type
-        db.session.commit()
-        return jsonify(shop.to_dict())
+
+    db.session.commit()
+    return jsonify(shop.to_dict())
 
 @app.route('/api/suggest', methods=['POST'])
 def suggest():
@@ -144,28 +161,40 @@ def suggest():
         return jsonify({"error": "Shop not found"}), 404
 
     if item_type == 'wifi_passwords':
-        # Check if the suggestion already exists
-        existing_item = WifiPassword.query.filter_by(coffee_shop_id=shop_id, password=item_value).first()
+        Model = WifiPassword
+        existing_item = Model.query.filter_by(coffee_shop_id=shop_id, password=item_value).first()
         if existing_item:
             return jsonify({"error": "This suggestion already exists."}), 409
-        new_item = WifiPassword(password=item_value, coffee_shop=shop)
+        new_item = Model(password=item_value, coffee_shop=shop)
     elif item_type == 'bathroom_codes':
-        # Check if the suggestion already exists
-        existing_item = BathroomCode.query.filter_by(coffee_shop_id=shop_id, code=item_value).first()
+        Model = BathroomCode
+        existing_item = Model.query.filter_by(coffee_shop_id=shop_id, code=item_value).first()
         if existing_item:
             return jsonify({"error": "This suggestion already exists."}), 409
-        new_item = BathroomCode(code=item_value, coffee_shop=shop)
+        new_item = Model(code=item_value, coffee_shop=shop)
     else:
         return jsonify({"error": "Invalid item type"}), 400
+
+    # Check for and remove previous upvote from the same user
+    vote_prefix = f"{user_ip}_{shop_id}_{item_type}_"
+    for key, value in list(votes_db.items()):
+        if key.startswith(vote_prefix) and value == 'upvote':
+            existing_item_id_str = key.split('_')[-1]
+            if existing_item_id_str.isdigit():
+                existing_item_id = int(existing_item_id_str)
+                old_item = Model.query.get(existing_item_id)
+                if old_item:
+                    old_item.votes -= 1
+                del votes_db[key]
 
     db.session.add(new_item)
     db.session.commit()
 
-    # Automatically register an upvote from the suggester
-    vote_key = f"{user_ip}_{shop_id}_{item_type}_{item_value}"
+    # Automatically register an upvote for the new item
+    vote_key = f"{user_ip}_{shop_id}_{item_type}_{new_item.id}"
     votes_db[vote_key] = 'upvote'
 
-    db.session.refresh(shop) # Refresh the shop to get the new item in the list
+    db.session.refresh(shop)
 
     response_data = {
         "shop": shop.to_dict(),

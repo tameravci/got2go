@@ -135,48 +135,46 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function handleVote(shopId, itemType, itemValue, voteType, itemId) {
-    const voteKey = `vote-${shopId}-${itemType}-${itemId}`;
-    const userVote = localStorage.getItem(voteKey);
+    const userVoteKeyPrefix = `vote-${shopId}-${itemType}`;
+    const currentVoteKey = `${userVoteKeyPrefix}-${itemId}`;
+    let previousVoteKey = null;
 
-    if (userVote === voteType) { // User is trying to undo their vote
-        fetch(`${API_BASE_URL}/api/vote`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ shop_id: shopId, item_type: itemType, item_value: itemValue, vote_type: voteType })
-        }).then(response => {
-            if (response.ok) {
-                localStorage.removeItem(voteKey);
-                return response.json();
-            } else {
-                response.json().then(data => alert('Error: ' + data.error));
-            }
-        }).then(updatedShop => {
-            if (updatedShop) {
-                updateShopInAllCoffeeShops(updatedShop);
-                refreshMarkerPopup(shopId);
-            }
-        });
-    } else if (userVote && userVote !== voteType) {
-        alert('You have already voted on this item. Please undo your previous vote first.');
-    } else { // New vote
-        fetch(`${API_BASE_URL}/api/vote`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ shop_id: shopId, item_type: itemType, item_value: itemValue, vote_type: voteType })
-        }).then(response => {
-            if (response.ok) {
-                localStorage.setItem(voteKey, voteType);
-                return response.json();
-            } else {
-                response.json().then(data => alert('Error: ' + data.error));
-            }
-        }).then(updatedShop => {
-            if (updatedShop) {
-                updateShopInAllCoffeeShops(updatedShop);
-                refreshMarkerPopup(shopId);
-            }
-        });
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith(userVoteKeyPrefix) && localStorage.getItem(key) === 'upvote') {
+            previousVoteKey = key;
+            break;
+        }
     }
+
+    fetch(`${API_BASE_URL}/api/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop_id: shopId, item_type: itemType, item_value: itemValue, vote_type: voteType, item_id: itemId })
+    }).then(response => {
+        if (response.ok) {
+            return response.json();
+        } else {
+            response.json().then(data => alert('Error: ' + data.error));
+            return Promise.reject('Error voting');
+        }
+    }).then(updatedShop => {
+        if (updatedShop) {
+            if (previousVoteKey && previousVoteKey !== currentVoteKey) {
+                localStorage.removeItem(previousVoteKey);
+            }
+
+            const userVote = localStorage.getItem(currentVoteKey);
+            if (userVote === voteType) {
+                localStorage.removeItem(currentVoteKey);
+            } else {
+                localStorage.setItem(currentVoteKey, voteType);
+            }
+
+            updateShopInAllCoffeeShops(updatedShop);
+            refreshMarkerPopup(shopId);
+        }
+    });
 }
 
 function suggest(shopId, itemType, inputId) {
@@ -184,6 +182,17 @@ function suggest(shopId, itemType, inputId) {
     if (!itemValue) {
         alert('Please enter a value.');
         return;
+    }
+
+    const userVoteKeyPrefix = `vote-${shopId}-${itemType}`;
+    let previousVoteKey = null;
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith(userVoteKeyPrefix) && localStorage.getItem(key) === 'upvote') {
+            previousVoteKey = key;
+            break;
+        }
     }
 
     fetch(`${API_BASE_URL}/api/suggest`, {
@@ -199,6 +208,10 @@ function suggest(shopId, itemType, inputId) {
         }
     }).then(data => {
         if (data) {
+            if (previousVoteKey) {
+                localStorage.removeItem(previousVoteKey);
+            }
+
             const updatedShop = data.shop;
             const newItemId = data.newItemId;
 
