@@ -28,6 +28,20 @@ body {
     font-size: 24px;
 }
 
+.buy-me-a-coffee-link {
+    color: white;
+    text-decoration: none;
+    background-color: #007bff;
+    padding: 5px 10px;
+    border-radius: 5px;
+    margin-left: 20px;
+    font-weight: bold;
+}
+
+.buy-me-a-coffee-link:hover {
+    background-color: #0056b3;
+}
+
 #content-container {
     display: flex;
     flex-grow: 1; /* Take remaining vertical space */
