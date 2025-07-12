@@ -163,34 +163,40 @@ def suggest():
     if item_type == 'wifi_passwords':
         Model = WifiPassword
         existing_item = Model.query.filter_by(coffee_shop_id=shop_id, password=item_value).first()
-        if existing_item:
-            return jsonify({"error": "This suggestion already exists."}), 409
-        new_item = Model(password=item_value, coffee_shop=shop)
     elif item_type == 'bathroom_codes':
         Model = BathroomCode
         existing_item = Model.query.filter_by(coffee_shop_id=shop_id, code=item_value).first()
-        if existing_item:
-            return jsonify({"error": "This suggestion already exists."}), 409
-        new_item = Model(code=item_value, coffee_shop=shop)
     else:
         return jsonify({"error": "Invalid item type"}), 400
 
-    # Check for and remove previous upvote from the same user
+    if existing_item and existing_item.votes > 0:
+        return jsonify({"error": "This suggestion is already active."}), 409
+
     vote_prefix = f"{user_ip}_{shop_id}_{item_type}_"
     for key, value in list(votes_db.items()):
         if key.startswith(vote_prefix) and value == 'upvote':
             existing_item_id_str = key.split('_')[-1]
             if existing_item_id_str.isdigit():
                 existing_item_id = int(existing_item_id_str)
+                if existing_item and existing_item_id == existing_item.id:
+                    continue
                 old_item = Model.query.get(existing_item_id)
                 if old_item:
                     old_item.votes -= 1
                 del votes_db[key]
 
-    db.session.add(new_item)
+    if existing_item:
+        new_item = existing_item
+        new_item.votes = 1
+    else:
+        if item_type == 'wifi_passwords':
+            new_item = Model(password=item_value, coffee_shop=shop, votes=1)
+        else:
+            new_item = Model(code=item_value, coffee_shop=shop, votes=1)
+        db.session.add(new_item)
+    
     db.session.commit()
 
-    # Automatically register an upvote for the new item
     vote_key = f"{user_ip}_{shop_id}_{item_type}_{new_item.id}"
     votes_db[vote_key] = 'upvote'
 
