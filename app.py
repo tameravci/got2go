@@ -4,10 +4,15 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import os
 import uuid
+import time
 
 app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a_very_secret_key_that_should_be_in_env_vars')
+
+RATE_LIMIT_WINDOW = 600  # 10 minutes in seconds
+RATE_LIMIT_MAX_REQUESTS = 10
+ip_request_timestamps = {}
 
 app = Flask(__name__)
 CORS(app)
@@ -84,6 +89,24 @@ class BathroomCode(db.Model):
 
 # In-memory data store for IP-based vote tracking (will be cleared on server restart)
 votes_db = {}
+
+@app.before_request
+def rate_limit():
+    ip = request.remote_addr
+    current_time = time.time()
+
+    if ip not in ip_request_timestamps:
+        ip_request_timestamps[ip] = []
+
+    # Remove timestamps older than the window
+    ip_request_timestamps[ip] = [
+        t for t in ip_request_timestamps[ip] if current_time - t < RATE_LIMIT_WINDOW
+    ]
+
+    if len(ip_request_timestamps[ip]) >= RATE_LIMIT_MAX_REQUESTS:
+        return jsonify({"error": "Too many requests. Please try again later."}), 429
+
+    ip_request_timestamps[ip].append(current_time)
 
 @app.route('/api/coffee_shops', methods=['GET'])
 def get_coffee_shops():
