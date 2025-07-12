@@ -35,8 +35,8 @@ class CoffeeShop(db.Model):
             'address': self.address,
             'lat': self.lat,
             'lng': self.lng,
-            'wifi_passwords': [wp.to_dict() for wp in sorted(self.wifi_passwords, key=lambda x: x.votes, reverse=True)],
-            'bathroom_codes': [bc.to_dict() for bc in sorted(self.bathroom_codes, key=lambda x: x.votes, reverse=True)]
+            'wifi_passwords': [wp.to_dict() for wp in sorted(self.wifi_passwords, key=lambda x: x.votes, reverse=True) if wp.votes > 0],
+            'bathroom_codes': [bc.to_dict() for bc in sorted(self.bathroom_codes, key=lambda x: x.votes, reverse=True) if bc.votes > 0]
         }
 
 class WifiPassword(db.Model):
