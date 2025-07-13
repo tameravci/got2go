@@ -90,7 +90,7 @@ class BathroomCode(db.Model):
 # In-memory data store for IP-based vote tracking (will be cleared on server restart)
 votes_db = {}
 
-@app.before_request
+#@app.before_request
 def rate_limit():
     ip = request.remote_addr
     current_time = time.time()

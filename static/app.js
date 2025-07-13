@@ -72,11 +72,6 @@ function displayCoffeeShops(shopsToDisplay) {
         var marker = L.marker([shop.lat, shop.lng]);
         marker.shopId = shop.id; // Associate shop ID with marker
         marker.bindPopup(createPopupContent(shop));
-        marker.on('popupopen', function (e) {
-            var currentZoom = map.getZoom();
-            var offset = 0.006 * Math.pow(2, (13 - currentZoom)); // Adjust 0.006 and 13 as needed
-            map.panTo([e.popup.getLatLng().lat + offset, e.popup.getLatLng().lng]);
-        });
         markers.addLayer(marker);
 
         // Add to sidebar list
@@ -84,9 +79,6 @@ function displayCoffeeShops(shopsToDisplay) {
         listItem.className = 'shop-list-item';
         listItem.innerHTML = `<b>${shop.name}</b><br><small>${shop.address}</small>`;
         listItem.onclick = function() {
-            var targetZoom = 16;
-            var offset = 0.006 * Math.pow(2, (13 - targetZoom)); // Use the same formula
-            map.setView([shop.lat + offset, shop.lng], targetZoom);
             marker.openPopup();
             // Collapse sidebar if open
             var sidebar = document.getElementById('sidebar');
@@ -99,23 +91,28 @@ function displayCoffeeShops(shopsToDisplay) {
     });
 }
 
+function updateMarkers() {
+    displayCoffeeShops(allCoffeeShops);
+}
+
 document.addEventListener('DOMContentLoaded', function () {
-    map = L.map('map').setView([47.6062, -122.3321], 13);
+    map = L.map('map').setView([47.6062, -122.3321], 13); // Set initial view to central Seattle
     markers = L.featureGroup().addTo(map); // Layer to manage markers
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        maxZoom: 19
     }).addTo(map);
 
     fetch(`${API_BASE_URL}/api/coffee_shops`)
         .then(response => response.json())
         .then(coffeeShops => {
             allCoffeeShops = coffeeShops; // Store all shops
-            displayCoffeeShops(allCoffeeShops); // Display all initially
+            updateMarkers(); // Display all markers
             // Delay invalidateSize to ensure map container is fully rendered
-            setTimeout(function() {
+            setTimeout(function(){
                 map.invalidateSize();
-            }, 200); // 200ms delay
+            }, 500); // Increased delay to 500ms
         });
 
     document.getElementById('search-button').addEventListener('click', function() {
@@ -124,7 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
             shop.name.toLowerCase().includes(searchTerm) || 
             shop.address.toLowerCase().includes(searchTerm)
         );
-        displayCoffeeShops(filteredShops);
+        displayCoffeeShops(filteredShops); // Search results always display
     });
 
     // Toggle sidebar on mobile
@@ -132,6 +129,10 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('sidebar').classList.toggle('sidebar-open');
         map.invalidateSize(); // Invalidate map size after sidebar toggle
     });
+
+    window.onload = function() {
+    map.invalidateSize();
+    };
 });
 
 function handleVote(shopId, itemType, itemValue, voteType, itemId) {
@@ -167,7 +168,8 @@ function handleVote(shopId, itemType, itemValue, voteType, itemId) {
             const userVote = localStorage.getItem(currentVoteKey);
             if (userVote === voteType) {
                 localStorage.removeItem(currentVoteKey);
-            } else {
+            }
+            else {
                 localStorage.setItem(currentVoteKey, voteType);
             }
 

@@ -2,7 +2,6 @@ html, body {
     margin: 0;
     padding: 0;
     height: 100%; /* Ensure full height */
-    overflow: hidden; /* Prevent scrollbars from flex layout */
 }
 
 body {
@@ -68,8 +67,10 @@ body {
 }
 
 #map {
-    flex-grow: 1; /* Map takes remaining space */
-    height: 100%; /* Ensure map takes full height of its flex parent */
+    height: 100vh; 
+    width: 100%;
+    /*flex-grow: 1; /* Map takes remaining space */
+    /*height: 100%; /* Ensure map takes full height of its flex parent */
 }
 
 .search-container {
