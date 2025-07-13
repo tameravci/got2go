@@ -145,6 +145,17 @@ def get_coffee_shops():
     response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
     return response
 
+@app.route('/api/coffee_shops/<int:shop_id>', methods=['GET'])
+def get_coffee_shop(shop_id):
+    user_id = get_or_set_user_id()
+    print(f"API Call: /api/coffee_shops/{shop_id} - IP: {request.remote_addr}, User ID Cookie: {user_id}")
+    shop = CoffeeShop.query.get(shop_id)
+    if not shop:
+        return jsonify({"error": "Shop not found"}), 404
+    response = jsonify(shop.to_dict(user_id=user_id))
+    response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
+    return response
+
 @app.route('/')
 def index():
     return render_template('index.html')

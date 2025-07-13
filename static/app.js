@@ -106,6 +106,14 @@ function displayCoffeeShops(shopsToDisplayOnMap) {
         var marker = L.marker([shop.lat, shop.lng]);
         marker.shopId = shop.id; // Associate shop ID with marker
         marker.bindPopup(createPopupContent(shop));
+        marker.on('click', function() {
+            fetch(`${API_BASE_URL}/api/coffee_shops/${shop.id}`)
+                .then(response => response.json())
+                .then(updatedShop => {
+                    updateShopInAllCoffeeShops(updatedShop);
+                    refreshMarkerPopup(shop.id);
+                });
+        });
         markers.addLayer(marker);
     });
 }
