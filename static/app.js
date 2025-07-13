@@ -115,8 +115,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }, 500); // Increased delay to 500ms
         });
 
-    document.getElementById('search-button').addEventListener('click', function() {
-        var searchTerm = document.getElementById('search-input').value.toLowerCase();
+    document.getElementById('search-input').addEventListener('input', function() {
+        var searchTerm = this.value.toLowerCase();
         var filteredShops = allCoffeeShops.filter(shop => 
             shop.name.toLowerCase().includes(searchTerm) || 
             shop.address.toLowerCase().includes(searchTerm)
