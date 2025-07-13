@@ -57,6 +57,7 @@ body {
     flex-direction: column;
     flex-shrink: 0; /* Prevent sidebar from shrinking */
     transition: width 0.3s ease-in-out; /* Smooth transition for width */
+    height: 100%;
 }
 
 #sidebar h1 {
@@ -69,8 +70,6 @@ body {
 #map {
     height: 100vh; 
     width: 100%;
-    /*flex-grow: 1; /* Map takes remaining space */
-    /*height: 100%; /* Ensure map takes full height of its flex parent */
 }
 
 .search-container {
@@ -111,41 +110,73 @@ body {
 }
 
 .leaflet-popup-content-wrapper {
-    border-radius: 5px;
+    border-radius: 8px; /* More modern rounded corners */
+    background-color: #ffffff; /* White background */
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); /* Subtle shadow */
 }
+
 .leaflet-popup-content {
-    margin: 15px;
+    margin: 18px; /* Slightly more padding */
+    font-size: 16px; /* Bigger base font size */
+    color: #333; /* Darker text for readability */
 }
+
+.leaflet-popup-content b {
+    font-size: 1.1em; /* Slightly larger for shop name */
+}
+
+.leaflet-popup-content small {
+    font-size: 0.9em; /* Slightly smaller for address */
+    color: #666;
+}
+
 .leaflet-popup-content h5 {
-    margin-top: 15px;
-    margin-bottom: 10px; /* Increased bottom margin */
+    margin-top: 18px;
+    margin-bottom: 8px; /* Adjusted margin */
+    font-size: 1.05em; /* Slightly larger for headings */
+    color: #007bff;
 }
+
 .leaflet-popup-content div {
-    margin-bottom: 5px;
+    margin-bottom: 6px; /* Slightly more spacing */
 }
+
 .leaflet-popup-content button {
-    margin-left: 5px;
+    margin-left: 8px;
+    padding: 4px 8px; /* More padding for buttons */
+    border-radius: 4px; /* Rounded buttons */
+    border: 1px solid #ccc;
+    background-color: #f0f0f0;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
 }
+
+.leaflet-popup-content button:hover {
+    background-color: #e0e0e0;
+}
+
 .leaflet-popup-content input {
     flex-grow: 1;
-    margin-right: 5px;
-    padding-left: 5px; /* Add some padding to the left */
+    margin-right: 8px;
+    padding: 6px 8px; /* More padding for input */
+    border: 1px solid #ddd;
+    border-radius: 4px;
 }
 
 .suggestion-form {
     display: flex;
     align-items: center;
-    margin-top: 0; /* Removed top margin */
+    margin-top: 10px; /* Added top margin for spacing */
 }
 
 .leaflet-popup-content button.voted-up {
-    border: 2px solid #007bff;
-    background-color: #e0f0ff;
+    border: 2px solid #28a745; /* Green border for upvote */
+    background-color: #e6ffe6;
 }
 
 .leaflet-popup-content button.voted-down {
-    border: 2px solid #dc3545;
-    background-color: #ffe0e3;
+    border: 2px solid #dc3545; /* Red border for downvote */
+    background-color: #ffe6e6;
 }
 
 /* Mobile responsiveness */

@@ -22,11 +22,10 @@ function createPopupContent(shop) {
                 </div>`;
         });
     } else {
-        content += `<p>No wifi passwords yet. Be the first to suggest one!</p>`;
+        content += `<p>No wifi passwords yet.</p>`;
     }
 
     content += `
-        <h5>Suggest a new Wifi Password</h5>
         <div class="suggestion-form">
             <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password">
             <button onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Suggest</button>
@@ -49,11 +48,10 @@ function createPopupContent(shop) {
                 </div>`;
         });
     } else {
-        content += `<p>No bathroom codes yet. Be the first to suggest one!</p>`;
+        content += `<p>No bathroom codes yet.</p>`;
     }
 
     content += `
-        <h5>Suggest a new Bathroom Code</h5>
         <div class="suggestion-form">
             <input type="text" id="bathroom-suggestion-${shop.id}" placeholder="New code">
             <button onclick="suggest(${shop.id}, 'bathroom_codes', 'bathroom-suggestion-${shop.id}')">Suggest</button>
