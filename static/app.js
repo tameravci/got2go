@@ -75,18 +75,36 @@ function populateSidebar(shopsToDisplay) {
             const clickedShop = allCoffeeShops.find(s => s.id === shop.id);
             if (!clickedShop) return; // Should not happen
 
-            // Clear existing markers on the map before adding the selected one
-            markers.clearLayers();
+            let targetMarker = null;
+            // Check if a marker for this shop already exists on the map
+            markers.eachLayer(function(layer) {
+                if (layer.shopId === clickedShop.id) {
+                    targetMarker = layer;
+                }
+            });
 
-            // Create and add marker for the clicked shop
-            const marker = L.marker([clickedShop.lat, clickedShop.lng]);
-            marker.shopId = clickedShop.id;
-            marker.bindPopup(createPopupContent(clickedShop));
-            markers.addLayer(marker);
+            if (!targetMarker) {
+                // If no marker exists, create one and add it to the map
+                targetMarker = L.marker([clickedShop.lat, clickedShop.lng]);
+                targetMarker.shopId = clickedShop.id;
+                targetMarker.bindPopup(createPopupContent(clickedShop));
+                targetMarker.on('click', function() {
+                    fetch(`${API_BASE_URL}/api/coffee_shops/${clickedShop.id}`)
+                        .then(response => response.json())
+                        .then(updatedShop => {
+                            updateShopInAllCoffeeShops(updatedShop);
+                            refreshMarkerPopup(clickedShop.id);
+                        });
+                });
+                markers.addLayer(targetMarker);
+            }
 
             // Center the map on the clicked shop and open its popup
             map.setView([clickedShop.lat, clickedShop.lng], 16); // Zoom to a reasonable level
-            marker.openPopup();
+            targetMarker.openPopup();
+
+            // Re-display all mappable shops (including the clicked one)
+            updateMarkers();
 
             // Collapse sidebar if open
             var sidebar = document.getElementById('sidebar');
@@ -100,21 +118,32 @@ function populateSidebar(shopsToDisplay) {
 }
 
 function displayCoffeeShops(shopsToDisplayOnMap) {
-    markers.clearLayers(); // Clear existing markers
+    // Do NOT clear layers here, as we want to preserve markers added by sidebar clicks
+    // markers.clearLayers(); 
 
     shopsToDisplayOnMap.forEach(function (shop) {
-        var marker = L.marker([shop.lat, shop.lng]);
-        marker.shopId = shop.id; // Associate shop ID with marker
-        marker.bindPopup(createPopupContent(shop));
-        marker.on('click', function() {
-            fetch(`${API_BASE_URL}/api/coffee_shops/${shop.id}`)
-                .then(response => response.json())
-                .then(updatedShop => {
-                    updateShopInAllCoffeeShops(updatedShop);
-                    refreshMarkerPopup(shop.id);
-                });
+        // Only add marker if it doesn't already exist
+        let markerExists = false;
+        markers.eachLayer(function(layer) {
+            if (layer.shopId === shop.id) {
+                markerExists = true;
+            }
         });
-        markers.addLayer(marker);
+
+        if (!markerExists) {
+            var marker = L.marker([shop.lat, shop.lng]);
+            marker.shopId = shop.id; // Associate shop ID with marker
+            marker.bindPopup(createPopupContent(shop));
+            marker.on('click', function() {
+                fetch(`${API_BASE_URL}/api/coffee_shops/${shop.id}`)
+                    .then(response => response.json())
+                    .then(updatedShop => {
+                        updateShopInAllCoffeeShops(updatedShop);
+                        refreshMarkerPopup(shop.id);
+                    });
+            });
+            markers.addLayer(marker);
+        }
     });
 }
 
