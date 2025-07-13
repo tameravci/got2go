@@ -45,6 +45,7 @@ body {
     display: flex;
     flex-grow: 1; /* Take remaining vertical space */
     flex-direction: row; /* Sidebar and map side-by-side */
+    height: 100vh; /* Ensure content container takes full viewport height */
 }
 
 #sidebar {
@@ -68,13 +69,18 @@ body {
 }
 
 #map {
-    height: 100vh; 
+    height: 100%; 
     width: 100%;
 }
 
 .search-container {
     display: flex;
     margin-bottom: 20px;
+    position: sticky;
+    top: 0;
+    background-color: #f8f8f8; /* Same as sidebar background */
+    z-index: 10; /* Ensure it stays on top of scrolling content */
+    padding: 0 0 10px 0; /* Add some padding to separate from scrolling content */
 }
 
 #search-input {
