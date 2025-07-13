@@ -190,6 +190,46 @@ document.addEventListener('DOMContentLoaded', function () {
             (shop.bathroom_codes && shop.bathroom_codes.length > 0)
         );
         displayCoffeeShops(mappableFilteredShops); // Update map markers with filtered mappable shops
+
+        // Toggle clear button visibility
+        document.getElementById('clear-search').style.display = this.value ? 'inline-block' : 'none';
+    });
+
+    document.getElementById('clear-search').addEventListener('click', function() {
+        document.getElementById('search-input').value = '';
+        // Trigger the input event to re-filter and display all shops
+        document.getElementById('search-input').dispatchEvent(new Event('input'));
+    });
+
+    // Hide clear button initially
+    document.getElementById('clear-search').style.display = 'none';
+
+    // Welcome Modal Logic
+    const welcomeModal = document.getElementById('welcome-modal');
+    const letsGoButton = document.getElementById('lets-go-button');
+    const dontShowWelcomeAgainCheckbox = document.getElementById('dont-show-welcome-again');
+    const hasSeenWelcome = localStorage.getItem('hasSeenWelcomeModal');
+
+    function dismissWelcomeModal() {
+        welcomeModal.style.display = 'none';
+        if (dontShowWelcomeAgainCheckbox.checked) {
+            localStorage.setItem('hasSeenWelcomeModal', 'true');
+        } else {
+            localStorage.removeItem('hasSeenWelcomeModal');
+        }
+    }
+
+    if (hasSeenWelcome !== 'true') {
+        welcomeModal.style.display = 'flex';
+    }
+
+    letsGoButton.addEventListener('click', dismissWelcomeModal);
+
+    // Close modal if user clicks outside the modal content
+    welcomeModal.addEventListener('click', (event) => {
+        if (event.target === welcomeModal) {
+            dismissWelcomeModal();
+        }
     });
 
     // Toggle sidebar on mobile

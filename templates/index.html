@@ -8,6 +8,26 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+    <div id="welcome-modal" class="modal">
+        <div class="modal-content">
+            <h2>Welcome to Seattle Coffee Compass!</h2>
+            <ul>
+                <li>Is it a bathroom emergency? Or are you simply an introverted seattleite who avoids talking to people? Either way, we got you covered</li>
+                <li>We're trying to crowdsource all the Wi-Fi and bathroom codes, and keep them up to date</li>
+                <li>Only shops with existing Wi-Fi or bathroom code suggestions are displayed on the map. To suggest a code for a new coffee shop, use the left sidebar to find your shop</li>
+                <li>Upvote the codes that helped you and downvote the ones that are too old!</li>
+            </ul>
+            <p>Enjoy!</p>
+            <div class="modal-footer">
+                <label>
+                    <input type="checkbox" id="dont-show-welcome-again">
+                    Don't show this again
+                </label>
+                <button id="lets-go-button" class="lets-go-button">LET'S GO I HAVE TO PEE !!!</button>
+            </div>
+        </div>
+    </div>
+
     <header id="main-header">
         <button id="toggle-sidebar-header" class="sidebar-toggle-header">☰</button>
         <h1>Coffee Codebook</h1>
@@ -17,7 +37,7 @@
         <div id="sidebar">
             <div class="search-container">
                 <input type="text" id="search-input" placeholder="Search coffee shops...">
-                <button id="search-button">Search</button>
+                <span id="clear-search" style="cursor: pointer; color: red; font-weight: bold; margin-left: -25px; z-index: 2;">&times;</span>
             </div>
             <div id="shop-list"></div>
         </div>

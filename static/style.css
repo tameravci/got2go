@@ -1,3 +1,99 @@
+/* Modal Styles */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 10000; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: auto; /* Centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more responsive */
+    max-width: 600px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19);
+    position: relative;
+}
+
+.close-button {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    position: absolute;
+    top: 10px;
+    right: 20px;
+}
+
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.modal-content h2 {
+    text-align: center;
+    color: #333;
+    margin-top: 0;
+}
+
+.modal-content ul {
+    list-style-type: disc;
+    margin-left: 20px;
+    padding-left: 0;
+}
+
+.modal-content li {
+    margin-bottom: 10px;
+}
+
+.modal-content p {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.modal-footer {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.modal-footer label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.lets-go-button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    margin-top: 15px;
+    transition: background-color 0.2s ease;
+}
+
+.lets-go-button:hover {
+    background-color: #0056b3;
+}
+
 html, body {
     margin: 0;
     padding: 0;
@@ -77,31 +173,35 @@ body {
 .search-container {
     display: flex;
     margin-bottom: 20px;
-    position: sticky;
+    position: relative; /* Changed to relative for absolute positioning of clear icon */
     top: 0;
     background-color: #f8f8f8; /* Same as sidebar background */
     z-index: 10; /* Ensure it stays on top of scrolling content */
     padding: 20px 20px 10px 20px; /* Add padding to all sides */
+    align-items: center; /* Vertically align items */
 }
 
 #search-input {
     flex-grow: 1;
     padding: 8px;
+    padding-right: 30px; /* Make space for the clear icon */
     border: 1px solid #ddd;
-    border-radius: 4px 0 0 4px;
+    border-radius: 4px; /* Rounded corners for all sides */
 }
 
 #search-button {
-    padding: 8px 12px;
-    background-color: #007bff;
-    color: white;
-    border: none;
-    border-radius: 0 4px 4px 0;
-    cursor: pointer;
+    display: none; /* Hide the search button */
 }
 
-#search-button:hover {
-    background-color: #0056b3;
+#clear-search {
+    position: absolute; /* Position absolutely within the search container */
+    right: 30px; /* Adjust as needed to position over the input */
+    cursor: pointer;
+    color: #aaa; /* Softer color */
+    font-size: 18px; /* Slightly larger for better tap target */
+    padding: 5px; /* Add some padding for click area */
+    line-height: 1; /* Ensure vertical alignment */
+    z-index: 2;
 }
 
 .shop-list-item {

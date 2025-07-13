@@ -3,8 +3,10 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import os
-import uuid
 import time
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
