@@ -51,9 +51,8 @@ body {
 #sidebar {
     width: 300px; /* Fixed width for sidebar */
     background-color: #f8f8f8;
-    padding: 20px;
+    /* padding: 20px; Removed from here */
     box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-    overflow-y: auto; /* Enable scrolling for long lists */
     display: flex;
     flex-direction: column;
     flex-shrink: 0; /* Prevent sidebar from shrinking */
@@ -80,7 +79,7 @@ body {
     top: 0;
     background-color: #f8f8f8; /* Same as sidebar background */
     z-index: 10; /* Ensure it stays on top of scrolling content */
-    padding: 0 0 10px 0; /* Add some padding to separate from scrolling content */
+    padding: 20px 20px 10px 20px; /* Add padding to all sides */
 }
 
 #search-input {
@@ -109,6 +108,12 @@ body {
     border-bottom: 1px solid #eee;
     cursor: pointer;
     transition: background-color 0.2s ease;
+}
+
+#shop-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 0 20px 20px 20px; /* Add padding to match sidebar */
 }
 
 .shop-list-item:hover {
@@ -193,13 +198,13 @@ body {
 
     #sidebar {
         width: 80%; /* Sidebar takes full width */
-        height: 100%; /* Full height */
-        padding: 10px;
+        height: calc(100vh - 60px); /* Full height minus header height */
+        /* padding: 10px; Removed from here */
         box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         position: fixed; /* Position sidebar fixed */
-        top: 0; /* Align to top */
+        top: 60px; /* Start after header */
         left: -80%; /* Hide sidebar by default */
-        z-index: 1000; /* Ensure sidebar is above map */
+        z-index: 1003; /* Ensure sidebar is above map and header */
         transition: left 0.3s ease-in-out; /* Smooth transition for sliding */
     }
 
