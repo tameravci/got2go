@@ -7,18 +7,17 @@ function createPopupContent(shop) {
     let content = `<b>${shop.name}</b><br><small>${shop.address}</small><hr>`
 
     content += `<h5>Wifi Passwords</h5>`;
-    if (shop.wifi_passwords && shop.wifi_passwords.length > 0) {
-        shop.wifi_passwords.forEach(wifi => {
-            const voteKey = `vote-${shop.id}-wifi_passwords-${wifi.id}`;
-            const userVote = localStorage.getItem(voteKey);
-            const upvoteClass = userVote === 'upvote' ? 'voted-up' : '';
-            const downvoteClass = userVote === 'downvote' ? 'voted-down' : '';
+    const filteredWifi = shop.wifi_passwords.filter(wifi => wifi.votes > -3);
+    if (filteredWifi.length > 0) {
+        filteredWifi.forEach(wifi => {
+            const upvoteClass = wifi.user_vote === 'upvote' ? 'voted-up' : '';
+            const downvoteClass = wifi.user_vote === 'downvote' ? 'voted-down' : '';
 
             content += `
                 <div>
                     <span>${wifi.password} (${wifi.votes} vote${(wifi.votes === 1 || wifi.votes === 0) ? '' : 's'})</span>
-                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', '${wifi.password}', 'upvote', ${wifi.id})">👍</button>
-                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', '${wifi.password}', 'downvote', ${wifi.id})">👎</button>
+                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
+                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
                 </div>`;
         });
     } else {
@@ -33,18 +32,17 @@ function createPopupContent(shop) {
     `;
 
     content += `<hr><h5>Bathroom Codes</h5>`;
-    if (shop.bathroom_codes && shop.bathroom_codes.length > 0) {
-        shop.bathroom_codes.forEach(code => {
-            const voteKey = `vote-${shop.id}-bathroom_codes-${code.id}`;
-            const userVote = localStorage.getItem(voteKey);
-            const upvoteClass = userVote === 'upvote' ? 'voted-up' : '';
-            const downvoteClass = userVote === 'downvote' ? 'voted-down' : '';
+    const filteredBathroom = shop.bathroom_codes.filter(code => code.votes > -3);
+    if (filteredBathroom.length > 0) {
+        filteredBathroom.forEach(code => {
+            const upvoteClass = code.user_vote === 'upvote' ? 'voted-up' : '';
+            const downvoteClass = code.user_vote === 'downvote' ? 'voted-down' : '';
 
             content += `
                 <div>
                     <span>${code.code} (${code.votes} vote${(code.votes === 1 || code.votes === 0) ? '' : 's'})</span>
-                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', '${code.code}', 'upvote', ${code.id})">👍</button>
-                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', '${code.code}', 'downvote', ${code.id})">👎</button>
+                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'upvote', ${code.id})">👍</button>
+                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'downvote', ${code.id})">👎</button>
                 </div>`;
         });
     } else {
@@ -61,23 +59,35 @@ function createPopupContent(shop) {
     return content;
 }
 
-function displayCoffeeShops(shopsToDisplay) {
-    markers.clearLayers(); // Clear existing markers
+function populateSidebar(shopsToDisplay) {
     var shopListDiv = document.getElementById('shop-list');
     shopListDiv.innerHTML = ''; // Clear existing list
 
-    shopsToDisplay.forEach(function (shop) {
-        var marker = L.marker([shop.lat, shop.lng]);
-        marker.shopId = shop.id; // Associate shop ID with marker
-        marker.bindPopup(createPopupContent(shop));
-        markers.addLayer(marker);
+    // Sort shops alphabetically by name
+    shopsToDisplay.sort((a, b) => a.name.localeCompare(b.name));
 
-        // Add to sidebar list
+    shopsToDisplay.forEach(function (shop) {
         var listItem = document.createElement('div');
         listItem.className = 'shop-list-item';
         listItem.innerHTML = `<b>${shop.name}</b><br><small>${shop.address}</small>`;
         listItem.onclick = function() {
+            // Find the actual shop object from allCoffeeShops (important for consistent data)
+            const clickedShop = allCoffeeShops.find(s => s.id === shop.id);
+            if (!clickedShop) return; // Should not happen
+
+            // Clear existing markers on the map before adding the selected one
+            markers.clearLayers();
+
+            // Create and add marker for the clicked shop
+            const marker = L.marker([clickedShop.lat, clickedShop.lng]);
+            marker.shopId = clickedShop.id;
+            marker.bindPopup(createPopupContent(clickedShop));
+            markers.addLayer(marker);
+
+            // Center the map on the clicked shop and open its popup
+            map.setView([clickedShop.lat, clickedShop.lng], 16); // Zoom to a reasonable level
             marker.openPopup();
+
             // Collapse sidebar if open
             var sidebar = document.getElementById('sidebar');
             if (sidebar.classList.contains('sidebar-open')) {
@@ -89,8 +99,23 @@ function displayCoffeeShops(shopsToDisplay) {
     });
 }
 
+function displayCoffeeShops(shopsToDisplayOnMap) {
+    markers.clearLayers(); // Clear existing markers
+
+    shopsToDisplayOnMap.forEach(function (shop) {
+        var marker = L.marker([shop.lat, shop.lng]);
+        marker.shopId = shop.id; // Associate shop ID with marker
+        marker.bindPopup(createPopupContent(shop));
+        markers.addLayer(marker);
+    });
+}
+
 function updateMarkers() {
-    displayCoffeeShops(allCoffeeShops);
+    const mappableCoffeeShops = allCoffeeShops.filter(shop =>
+        (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
+        (shop.bathroom_codes && shop.bathroom_codes.length > 0)
+    );
+    displayCoffeeShops(mappableCoffeeShops);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -106,7 +131,8 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(response => response.json())
         .then(coffeeShops => {
             allCoffeeShops = coffeeShops; // Store all shops
-            updateMarkers(); // Display all markers
+            populateSidebar(allCoffeeShops); // Populate sidebar with all shops
+            updateMarkers(); // Display mappable markers on the map
             // Delay invalidateSize to ensure map container is fully rendered
             setTimeout(function(){
                 map.invalidateSize();
@@ -119,7 +145,14 @@ document.addEventListener('DOMContentLoaded', function () {
             shop.name.toLowerCase().includes(searchTerm) || 
             shop.address.toLowerCase().includes(searchTerm)
         );
-        displayCoffeeShops(filteredShops); // Search results always display
+        populateSidebar(filteredShops); // Update sidebar with filtered shops
+
+        // Filter for mappable shops among the search results
+        const mappableFilteredShops = filteredShops.filter(shop =>
+            (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
+            (shop.bathroom_codes && shop.bathroom_codes.length > 0)
+        );
+        displayCoffeeShops(mappableFilteredShops); // Update map markers with filtered mappable shops
     });
 
     // Toggle sidebar on mobile
@@ -133,23 +166,11 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 });
 
-function handleVote(shopId, itemType, itemValue, voteType, itemId) {
-    const userVoteKeyPrefix = `vote-${shopId}-${itemType}`;
-    const currentVoteKey = `${userVoteKeyPrefix}-${itemId}`;
-    let previousVoteKey = null;
-
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.startsWith(userVoteKeyPrefix) && localStorage.getItem(key) === 'upvote') {
-            previousVoteKey = key;
-            break;
-        }
-    }
-
+function handleVote(shopId, itemType, voteType, itemId) {
     fetch(`${API_BASE_URL}/api/vote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop_id: shopId, item_type: itemType, item_value: itemValue, vote_type: voteType, item_id: itemId })
+        body: JSON.stringify({ shop_id: shopId, item_type: itemType, vote_type: voteType, item_id: itemId })
     }).then(response => {
         if (response.ok) {
             return response.json();
@@ -159,18 +180,6 @@ function handleVote(shopId, itemType, itemValue, voteType, itemId) {
         }
     }).then(updatedShop => {
         if (updatedShop) {
-            if (previousVoteKey && previousVoteKey !== currentVoteKey) {
-                localStorage.removeItem(previousVoteKey);
-            }
-
-            const userVote = localStorage.getItem(currentVoteKey);
-            if (userVote === voteType) {
-                localStorage.removeItem(currentVoteKey);
-            }
-            else {
-                localStorage.setItem(currentVoteKey, voteType);
-            }
-
             updateShopInAllCoffeeShops(updatedShop);
             refreshMarkerPopup(shopId);
         }
@@ -182,17 +191,6 @@ function suggest(shopId, itemType, inputId) {
     if (!itemValue) {
         alert('Please enter a value.');
         return;
-    }
-
-    const userVoteKeyPrefix = `vote-${shopId}-${itemType}`;
-    let previousVoteKey = null;
-
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key.startsWith(userVoteKeyPrefix) && localStorage.getItem(key) === 'upvote') {
-            previousVoteKey = key;
-            break;
-        }
     }
 
     fetch(`${API_BASE_URL}/api/suggest`, {
@@ -208,16 +206,7 @@ function suggest(shopId, itemType, inputId) {
         }
     }).then(data => {
         if (data) {
-            if (previousVoteKey) {
-                localStorage.removeItem(previousVoteKey);
-            }
-
             const updatedShop = data.shop;
-            const newItemId = data.newItemId;
-
-            const voteKey = `vote-${shopId}-${itemType}-${newItemId}`;
-            localStorage.setItem(voteKey, 'upvote');
-
             updateShopInAllCoffeeShops(updatedShop);
             refreshMarkerPopup(shopId);
             document.getElementById(inputId).value = '';
