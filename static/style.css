@@ -13,17 +13,19 @@ body {
 #main-header {
     background-color: #333;
     color: white;
-    padding: 10px 20px;
+    /* padding: 10px 20px; */
     display: flex;
     align-items: center;
-    justify-content: center; /* Center the title */
+    justify-content: space-between; /* Distribute space between items */
+    /* gap: 10px; Removed */
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     position: relative; /* For positioning the toggle button */
     z-index: 1002; /* Ensure header is on top */
 }
 
 #main-header h1 {
-    margin: 0;
+    flex-grow: 1; /* Allow h1 to take available space */
+    text-align: center; /* Center the text within h1 */
     font-size: 24px;
 }
 
@@ -33,7 +35,7 @@ body {
     background-color: #007bff;
     padding: 5px 10px;
     border-radius: 5px;
-    margin-left: 20px;
+    margin-right: 10px;
     font-weight: bold;
 }
 
@@ -45,7 +47,7 @@ body {
     display: flex;
     flex-grow: 1; /* Take remaining vertical space */
     flex-direction: row; /* Sidebar and map side-by-side */
-    height: 100vh; /* Ensure content container takes full viewport height */
+    height: calc(100vh - 80px); /* Adjust height to account for header */
 }
 
 #sidebar {
@@ -219,10 +221,7 @@ body {
 
     .sidebar-toggle-header {
         display: block; /* Show toggle button on mobile */
-        position: absolute;
-        top: 50%;
-        left: 10px;
-        transform: translateY(-50%);
+        /* Removed absolute positioning */
         background-color: #007bff;
         color: white;
         border: none;
@@ -230,6 +229,10 @@ body {
         border-radius: 5px;
         cursor: pointer;
         font-size: 20px;
+    }
+
+    #main-header h1 {
+        font-size: 20px; /* Smaller font size for mobile */
     }
 
     /* Adjust Leaflet zoom control position */
