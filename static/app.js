@@ -16,6 +16,7 @@ function createPopupContent(shop) {
             content += `
                 <div>
                     <span>${wifi.password} (${wifi.votes} vote${(wifi.votes === 1 || wifi.votes === 0) ? '' : 's'})</span>
+                    <button class="copy-button" onclick="copyToClipboard('${wifi.password}')">📋</button>
                     <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
                     <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
                 </div>`;
@@ -256,10 +257,73 @@ document.addEventListener('DOMContentLoaded', function () {
     // Event listener for the new checkbox
     document.getElementById('show-all-locations').addEventListener('change', updateMarkers);
 
+    // Geolocation button
+    document.getElementById('find-me-button').addEventListener('click', function() {
+        map.locate({setView: true, maxZoom: 16});
+    });
+
+    map.on('locationfound', function(e) {
+        var radius = e.accuracy;
+        L.marker(e.latlng).addTo(map)
+            .bindPopup("You are within " + radius + " meters from this point").openPopup();
+        L.circle(e.latlng, radius).addTo(map);
+    });
+
+    map.on('locationerror', function(e) {
+        alert(e.message);
+    });
+
     window.onload = function() {
     map.invalidateSize();
     };
 });
+
+function showToast(message) {
+    var toast = document.getElementById("toast");
+    if (toast) {
+        toast.className = "show";
+        toast.innerHTML = message;
+        setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 3000);
+    }
+}
+
+function copyToClipboard(text) {
+    // Modern browsers with secure context (HTTPS)
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(function() {
+            showToast("Copied to clipboard!");
+        }, function(err) {
+            showToast("Failed to copy.");
+            console.error('Async: Could not copy text: ', err);
+        });
+    } else {
+        // Fallback for older browsers or insecure contexts (HTTP)
+        let textArea = document.createElement("textarea");
+        textArea.value = text;
+        // Make the textarea out of sight
+        textArea.style.position = "fixed";
+        textArea.style.top = "-9999px";
+        textArea.style.left = "-9999px";
+
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        try {
+            let successful = document.execCommand('copy');
+            if (successful) {
+                showToast("Copied to clipboard!");
+            } else {
+                showToast("Failed to copy.");
+            }
+        } catch (err) {
+            showToast("Failed to copy.");
+            console.error('Fallback: Oops, unable to copy', err);
+        }
+
+        document.body.removeChild(textArea);
+    }
+}
 
 function handleVote(shopId, itemType, voteType, itemId) {
     fetch(`${API_BASE_URL}/api/vote`, {

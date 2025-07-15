@@ -47,9 +47,12 @@
             </div>
             <div id="shop-list"></div>
         </div>
-        <div id="map"></div>
+        <div id="map">
+            <button id="find-me-button" title="Find my location">&#8982;</button>
+        </div>
     </div>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <div id="toast"></div>
 </body>
 </html>
