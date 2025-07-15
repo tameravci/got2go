@@ -4,7 +4,7 @@ let markers;
 let map;
 
 function createPopupContent(shop) {
-    let content = `<b>${shop.name}</b><br><small>${shop.address}</small><hr>`
+    let content = `<b>${shop.name}</b><br><small>${shop.address}</small>`
 
     content += `<hr><h5>Bathroom Codes</h5>`;
     const filteredBathroom = shop.bathroom_codes.filter(code => code.votes > -3);

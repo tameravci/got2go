@@ -349,6 +349,14 @@ body {
     margin-top: 10px; /* Added top margin for spacing */
 }
 
+.leaflet-popup-content hr {
+    margin-top: 20px; /* Add space above the horizontal rule */
+    margin-bottom: 10px; /* Keep some space below it */
+    border: 0;
+    height: 1px;
+    background: #eee; /* Light grey line */
+}
+
 .leaflet-popup-content button.voted-up {
     border: 2px solid #28a745; /* Green border for upvote */
     background-color: #e6ffe6;
