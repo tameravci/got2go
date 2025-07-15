@@ -163,6 +163,9 @@ function updateMarkers() {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    const loadingIndicator = document.getElementById('loading-indicator');
+    loadingIndicator.style.display = 'flex'; // Show loading indicator
+
     map = L.map('map').setView([47.6062, -122.3321], 13); // Set initial view to central Seattle
     markers = L.featureGroup().addTo(map); // Layer to manage markers
 
@@ -181,6 +184,7 @@ document.addEventListener('DOMContentLoaded', function () {
             setTimeout(function(){
                 map.invalidateSize();
             }, 500); // Increased delay to 500ms
+            loadingIndicator.style.display = 'none'; // Hide loading indicator
         });
 
     document.getElementById('search-input').addEventListener('input', function() {
