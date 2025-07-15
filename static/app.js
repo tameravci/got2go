@@ -6,32 +6,6 @@ let map;
 function createPopupContent(shop) {
     let content = `<b>${shop.name}</b><br><small>${shop.address}</small><hr>`
 
-    content += `<h5>Wifi Passwords</h5>`;
-    const filteredWifi = shop.wifi_passwords.filter(wifi => wifi.votes > -3);
-    if (filteredWifi.length > 0) {
-        filteredWifi.forEach(wifi => {
-            const upvoteClass = wifi.user_vote === 'upvote' ? 'voted-up' : '';
-            const downvoteClass = wifi.user_vote === 'downvote' ? 'voted-down' : '';
-
-            content += `
-                <div>
-                    <span>${wifi.password} (${wifi.votes} vote${(wifi.votes === 1 || wifi.votes === 0) ? '' : 's'})</span>
-                    <button class="copy-button" onclick="copyToClipboard('${wifi.password}')">📋</button>
-                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
-                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
-                </div>`;
-        });
-    } else {
-        content += `<p>No wifi passwords yet.</p>`;
-    }
-
-    content += `
-        <div class="suggestion-form">
-            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16">
-            <button onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Suggest</button>
-        </div>
-    `;
-
     content += `<hr><h5>Bathroom Codes</h5>`;
     const filteredBathroom = shop.bathroom_codes.filter(code => code.votes > -3);
     if (filteredBathroom.length > 0) {
@@ -54,6 +28,32 @@ function createPopupContent(shop) {
         <div class="suggestion-form">
             <input type="text" id="bathroom-suggestion-${shop.id}" placeholder="New code (digits, *, #)" pattern="[0-9*#]+" oninput="this.value = this.value.replace(/[^0-9*#]/g, '');" maxlength="12">
             <button onclick="suggest(${shop.id}, 'bathroom_codes', 'bathroom-suggestion-${shop.id}')">Suggest</button>
+        </div>
+    `;
+
+    content += `<hr><h5>Wifi Passwords</h5>`;
+    const filteredWifi = shop.wifi_passwords.filter(wifi => wifi.votes > -3);
+    if (filteredWifi.length > 0) {
+        filteredWifi.forEach(wifi => {
+            const upvoteClass = wifi.user_vote === 'upvote' ? 'voted-up' : '';
+            const downvoteClass = wifi.user_vote === 'downvote' ? 'voted-down' : '';
+
+            content += `
+                <div>
+                    <span>${wifi.password} (${wifi.votes} vote${(wifi.votes === 1 || wifi.votes === 0) ? '' : 's'})</span>
+                    <button class="copy-button" onclick="copyToClipboard('${wifi.password}')">📋</button>
+                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
+                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
+                </div>`;
+        });
+    } else {
+        content += `<p>No wifi passwords yet.</p>`;
+    }
+
+    content += `
+        <div class="suggestion-form">
+            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16">
+            <button onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Suggest</button>
         </div>
     `;
 
