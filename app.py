@@ -236,10 +236,14 @@ def suggest():
         return jsonify({"error": "Shop not found"}), 404
 
     if item_type == 'wifi_passwords':
+        if len(item_value) > 16:
+            return jsonify({"error": "Wi-Fi password cannot be longer than 16 characters."}), 400
         Model = WifiPassword
         item_type_str = 'wifi_password'
         existing_item = Model.query.filter_by(coffee_shop_id=shop_id, password=item_value).first()
     elif item_type == 'bathroom_codes':
+        if len(item_value) > 12:
+            return jsonify({"error": "Bathroom code cannot be longer than 12 characters."}), 400
         Model = BathroomCode
         item_type_str = 'bathroom_code'
         existing_item = Model.query.filter_by(coffee_shop_id=shop_id, code=item_value).first()

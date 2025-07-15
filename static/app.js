@@ -26,7 +26,7 @@ function createPopupContent(shop) {
 
     content += `
         <div class="suggestion-form">
-            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password">
+            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16">
             <button onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Suggest</button>
         </div>
     `;
@@ -51,7 +51,7 @@ function createPopupContent(shop) {
 
     content += `
         <div class="suggestion-form">
-            <input type="text" id="bathroom-suggestion-${shop.id}" placeholder="New code">
+            <input type="text" id="bathroom-suggestion-${shop.id}" placeholder="New code (digits, *, #)" pattern="[0-9*#]+" oninput="this.value = this.value.replace(/[^0-9*#]/g, '');" maxlength="12">
             <button onclick="suggest(${shop.id}, 'bathroom_codes', 'bathroom-suggestion-${shop.id}')">Suggest</button>
         </div>
     `;
