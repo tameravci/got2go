@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://tameravci.tplinkdns.com:8080';
+const API_BASE_URL = 'https://got2gosea.com';
 let allCoffeeShops = [];
 let markers;
 let map;
@@ -61,7 +61,7 @@ function createPopupContent(shop) {
 
     content += `
         <div class="suggestion-form">
-            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16">
+            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16" oninput="this.value = this.value.replace(/\s/g, '');">
             <button onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Suggest</button>
         </div>
     `;

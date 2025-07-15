@@ -74,6 +74,15 @@
     text-align: center;
     color: #333;
     margin-top: 0;
+    /* Removed flex properties as logo is now separate */
+}
+
+.modal-logo-container {
+    text-align: center; /* Center the image within its container */
+}
+
+.modal-logo {
+    height: 120px; /* Adjust size as needed */
 }
 
 .modal-content ul {
@@ -150,6 +159,12 @@ body {
     flex-grow: 1; /* Allow h1 to take available space */
     text-align: center; /* Center the text within h1 */
     font-size: 24px;
+    margin-left: 10px; /* Space between logo and title */
+}
+
+.header-logo {
+    height: 40px; /* Adjust as needed */
+    margin-left: 10px;
 }
 
 .buy-me-a-coffee-link {

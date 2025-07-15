@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Seattle Coffee Compass</title>
+    <title>Got2GoSEA</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -13,9 +13,12 @@
     </div>
     <div id="welcome-modal" class="modal">
         <div class="modal-content">
-            <h2>Welcome to Seattle Coffee Compass!</h2>
+            <h2>Welcome to Got2GoSEA!</h2>
+            <div class="modal-logo-container">
+                <img src="{{ url_for('static', filename='logo-toilet.png') }}" alt="Got2GoSEA Logo" class="modal-logo">
+            </div>
             <ul>
-                <li>Is it a bathroom emergency? Or are you simply an introverted seattleite who avoids talking to people? Either way, we got you covered</li>
+                <li>Is it a bathroom emergency? Or are you simply an introverted Seattleite who avoids talking to people? Either way, we got you covered</li>
                 <li>We're trying to crowdsource all the Wi-Fi and bathroom codes, and keep them up to date</li>
                 <li>Only shops with existing Wi-Fi or bathroom code suggestions are displayed on the map. To suggest a code for a new coffee shop, use the left sidebar to find your shop</li>
                 <li>Upvote the codes that helped you and downvote the ones that are too old!</li>
@@ -26,14 +29,15 @@
                     <input type="checkbox" id="dont-show-welcome-again">
                     Don't show this again
                 </label>
-                <button id="lets-go-button" class="lets-go-button">LET'S GO I HAVE TO PEE !!!</button>
+                <button id="lets-go-button" class="lets-go-button">LET ME IN I GOT 2 GO !!!</button>
             </div>
         </div>
     </div>
 
     <header id="main-header">
         <button id="toggle-sidebar-header" class="sidebar-toggle-header">☰</button>
-        <h1>Coffee Codebook</h1>
+        <img src="{{ url_for('static', filename='logo-toilet.png') }}" alt="Got2GoSEA Logo" class="header-logo">
+        <h1>Got2GoSEA</h1>
         <a href="https://buymeacoffee.com/tameravci" target="_blank" class="buy-me-a-coffee-link">Buy Me a Coffee</a>
     </header>
     <div id="content-container">
