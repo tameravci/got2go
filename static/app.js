@@ -24,7 +24,7 @@ function createPopupContent(shop) {
 
             content += `
                 <div>
-                    <span>${escapeHtml(code.code)} (${code.votes} vote${(code.votes === 1 || code.votes === 0) ? '' : 's'})</span>
+                    <span class="popup-item-text">${escapeHtml(code.code)} (${code.votes > 0 ? '+' : ''}${code.votes})</span>
                     <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'upvote', ${code.id})">👍</button>
                     <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'downvote', ${code.id})">👎</button>
                 </div>`;
@@ -49,7 +49,7 @@ function createPopupContent(shop) {
 
             content += `
                 <div>
-                    <span>${escapeHtml(wifi.password)} (${wifi.votes} vote${(wifi.votes === 1 || wifi.votes === 0) ? '' : 's'})</span>
+                    <span class="popup-item-text">${escapeHtml(wifi.password)} (${wifi.votes > 0 ? '+' : ''}${wifi.votes})</span>
                     <button class="copy-button" onclick="copyToClipboard('${wifi.password}')">📋</button>
                     <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
                     <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
@@ -171,6 +171,35 @@ function updateMarkers() {
     displayCoffeeShops(shopsToDisplayOnMap);
 }
 
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+// Debounced search function
+const debouncedSearch = debounce(function() {
+    var searchTerm = this.value.toLowerCase();
+    var filteredShops = allCoffeeShops.filter(shop => 
+        shop.name.toLowerCase().includes(searchTerm) || 
+        shop.address.toLowerCase().includes(searchTerm)
+    );
+    populateSidebar(filteredShops); // Update sidebar with filtered shops
+
+    // Filter for mappable shops among the search results
+    const mappableFilteredShops = filteredShops.filter(shop =>
+        (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
+        (shop.bathroom_codes && shop.bathroom_codes.length > 0)
+    );
+    displayCoffeeShops(mappableFilteredShops); // Update map markers with filtered mappable shops
+
+    // Toggle clear button visibility
+    document.getElementById('clear-search').style.display = this.value ? 'inline-block' : 'none';
+}, 300); // 300ms debounce delay
+
 document.addEventListener('DOMContentLoaded', function () {
     const loadingIndicator = document.getElementById('loading-indicator');
     loadingIndicator.style.display = 'flex'; // Show loading indicator
@@ -196,24 +225,7 @@ document.addEventListener('DOMContentLoaded', function () {
             loadingIndicator.style.display = 'none'; // Hide loading indicator
         });
 
-    document.getElementById('search-input').addEventListener('input', function() {
-        var searchTerm = this.value.toLowerCase();
-        var filteredShops = allCoffeeShops.filter(shop => 
-            shop.name.toLowerCase().includes(searchTerm) || 
-            shop.address.toLowerCase().includes(searchTerm)
-        );
-        populateSidebar(filteredShops); // Update sidebar with filtered shops
-
-        // Filter for mappable shops among the search results
-        const mappableFilteredShops = filteredShops.filter(shop =>
-            (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
-            (shop.bathroom_codes && shop.bathroom_codes.length > 0)
-        );
-        displayCoffeeShops(mappableFilteredShops); // Update map markers with filtered mappable shops
-
-        // Toggle clear button visibility
-        document.getElementById('clear-search').style.display = this.value ? 'inline-block' : 'none';
-    });
+    document.getElementById('search-input').addEventListener('input', debouncedSearch);
 
     document.getElementById('clear-search').addEventListener('click', function() {
         document.getElementById('search-input').value = '';

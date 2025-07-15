@@ -318,14 +318,22 @@ body {
 }
 
 .leaflet-popup-content div {
+    display: flex; /* Use flexbox for alignment */
+    align-items: center; /* Vertically align items */
     margin-bottom: 6px; /* Slightly more spacing */
+}
+
+.popup-item-text {
+    flex-grow: 1; /* Allow text to take available space */
+    word-break: break-all; /* Break long words */
+    margin-right: 5px; /* Space between text and buttons */
 }
 
 .leaflet-popup-content button {
     margin-left: 8px;
-    padding: 4px 8px; /* More padding for buttons */
-    border-radius: 4px; /* Rounded buttons */
-    border: 1px solid #ccc;
+    padding: 3px 7px; /* Adjusted padding */
+    border-radius: 4px;
+    border: 2px solid #ccc; /* Consistent 2px border */
     background-color: #f0f0f0;
     cursor: pointer;
     transition: background-color 0.2s ease, border-color 0.2s ease;
