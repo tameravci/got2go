@@ -1,98 +1,98 @@
 import requests
 import json
 import os
-from app import app, db, CoffeeShop, WifiPassword, BathroomCode
+import argparse
+from app import app, db, CoffeeShop
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 # Bounding box for Greater Seattle: (min_lat, min_lon, max_lat, max_lon)
 SEATTLE_BOUNDING_BOX = "47.45,-122.55,47.82,-122.20"
 
-OVERPASS_QUERY = f"""
+OVERPASS_QUERY = f""" 
 [out:json];
 (
-  node["shop"="coffee"]({SEATTLE_BOUNDING_BOX});
-  node["amenity"="cafe"]({SEATTLE_BOUNDING_BOX});
+  node["shop"~"coffee|tea_shop|pastry|bakery|supermarket|grocery"]({SEATTLE_BOUNDING_BOX});
+  node["amenity"~"cafe|fast_food|bar"]({SEATTLE_BOUNDING_BOX});
 );
 out center;
 """
 
 CACHE_FILE = "osm_coffee_shops_cache.json"
 
-def get_coffee_shops_from_osm():
-    if os.path.exists(CACHE_FILE):
+def get_coffee_shops_from_osm(use_cache=True):
+    if use_cache and os.path.exists(CACHE_FILE):
         print(f"Loading coffee shops from cache: {CACHE_FILE}")
         with open(CACHE_FILE, "r") as f:
             return json.load(f)
     
     print("Fetching coffee shops from OpenStreetMap API...")
-    response = requests.post(OVERPASS_URL, data=OVERPASS_QUERY)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.post(OVERPASS_URL, data=OVERPASS_QUERY)
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching data from Overpass API: {e}")
+        return []
+
     coffee_shops = []
-    for element in data["elements"]:
+    for element in data.get("elements", []):
         if "tags" in element and "name" in element["tags"]:
-            address = ""
-            if "addr:full" in element["tags"]:
-                address = element["tags"]["addr:full"]
-            else:
-                address_parts_ordered = []
-
-                # Street and House Number
-                house_number = element["tags"].get("addr:housenumber", "")
-                street = element["tags"].get("addr:street", "")
-                if house_number and street:
-                    address_parts_ordered.append(f"{house_number} {street}")
-                elif house_number:
-                    address_parts_ordered.append(house_number)
-                elif street:
-                    address_parts_ordered.append(street)
-
-                # City, State, Postcode
-                city = element["tags"].get("addr:city", "")
-                state = "WA" # TODO: Get state from element["tags"].get("addr:state", "")
-                postcode = element["tags"].get("addr:postcode", "")
-
-                city_state_postcode_parts = []
-                if city:
-                    city_state_postcode_parts.append(city)
-                if state:
-                    city_state_postcode_parts.append(state)
-                if postcode:
-                    city_state_postcode_parts.append(postcode)
-
-                if city_state_postcode_parts:
-                    address_parts_ordered.append(" ".join(city_state_postcode_parts))
-
-                address = ", ".join(filter(None, address_parts_ordered))
+            # Construct address
+            tags = element["tags"]
+            address_parts = [
+                tags.get("addr:housenumber"),
+                tags.get("addr:street"),
+                tags.get("addr:city"),
+                tags.get("addr:state", "WA"),
+                tags.get("addr:postcode")
+            ]
+            address = ", ".join(filter(None, [" ".join(filter(None, address_parts[:2])), 
+                                             " ".join(filter(None, address_parts[2:]))]))
+            if not address:
+                address = tags.get("addr:full", "Address not available")
 
             coffee_shops.append({
                 "name": element["tags"]["name"],
-                "lat": element["lat"],
-                "lng": element["lon"],
+                "lat": element.get("lat"),
+                "lng": element.get("lon"),
                 "address": address
             })
     
     with open(CACHE_FILE, "w") as f:
         json.dump(coffee_shops, f, indent=4)
-    print(f"Saved coffee shops to cache: {CACHE_FILE}")
+    print(f"Saved {len(coffee_shops)} coffee shops to cache: {CACHE_FILE}")
     return coffee_shops
 
-with app.app_context():
-    # Clear existing data (optional, for fresh start)
-    db.drop_all()
-    db.create_all()
+def populate_db():
+    parser = argparse.ArgumentParser(description='Populate the database with coffee shops from OpenStreetMap.')
+    parser.add_argument('--no-cache', action='store_true', help='Do not use the cache file and fetch fresh data.')
+    args = parser.parse_args()
 
-    # Get coffee shops from OpenStreetMap
-    osm_coffee_shops = get_coffee_shops_from_osm()
+    with app.app_context():
+        # Get coffee shops from OpenStreetMap
+        osm_coffee_shops = get_coffee_shops_from_osm(use_cache=not args.no_cache)
 
-    for shop_data in osm_coffee_shops:
-        coffee_shop = CoffeeShop(
-            name=shop_data["name"],
-            address=shop_data["address"],
-            lat=shop_data["lat"],
-            lng=shop_data["lng"]
-        )
-        db.session.add(coffee_shop)
+        existing_shops = {
+            (shop.name, shop.address): shop for shop in CoffeeShop.query.all()
+        }
+        
+        new_shops_count = 0
+        for shop_data in osm_coffee_shops:
+            if (shop_data["name"], shop_data["address"]) not in existing_shops:
+                coffee_shop = CoffeeShop(
+                    name=shop_data["name"],
+                    address=shop_data["address"],
+                    lat=shop_data["lat"],
+                    lng=shop_data["lng"]
+                )
+                db.session.add(coffee_shop)
+                new_shops_count += 1
 
-    db.session.commit()
-    print(f"Database populated with {len(osm_coffee_shops)} coffee shops from OpenStreetMap!")
+        if new_shops_count > 0:
+            db.session.commit()
+            print(f"Added {new_shops_count} new coffee shops to the database.")
+        else:
+            print("No new coffee shops to add.")
+
+if __name__ == "__main__":
+    populate_db()
