@@ -270,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     map.on('locationerror', function(e) {
-        alert(e.message);
+        showToast(e.message);
     });
 
     window.onload = function() {
@@ -334,7 +334,7 @@ function handleVote(shopId, itemType, voteType, itemId) {
         if (response.ok) {
             return response.json();
         } else {
-            response.json().then(data => alert('Error: ' + data.error));
+            response.json().then(data => showToast('Error: ' + data.error));
             return Promise.reject('Error voting');
         }
     }).then(updatedShop => {
@@ -348,7 +348,7 @@ function handleVote(shopId, itemType, voteType, itemId) {
 function suggest(shopId, itemType, inputId) {
     const itemValue = document.getElementById(inputId).value;
     if (!itemValue) {
-        alert('Please enter a value.');
+        showToast('Please enter a value.');
         return;
     }
 
@@ -360,7 +360,7 @@ function suggest(shopId, itemType, inputId) {
         if (response.ok) {
             return response.json();
         } else {
-            response.json().then(data => alert('Error: ' + data.error));
+            response.json().then(data => showToast('Error: ' + data.error));
             return Promise.reject('Error suggesting item');
         }
     }).then(data => {
