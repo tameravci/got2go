@@ -103,9 +103,6 @@ function populateSidebar(shopsToDisplay) {
             map.setView([clickedShop.lat, clickedShop.lng], 16); // Zoom to a reasonable level
             targetMarker.openPopup();
 
-            // Re-display all mappable shops (including the clicked one)
-            updateMarkers();
-
             // Collapse sidebar if open
             var sidebar = document.getElementById('sidebar');
             if (sidebar.classList.contains('sidebar-open')) {
@@ -148,11 +145,20 @@ function displayCoffeeShops(shopsToDisplayOnMap) {
 }
 
 function updateMarkers() {
-    const mappableCoffeeShops = allCoffeeShops.filter(shop =>
-        (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
-        (shop.bathroom_codes && shop.bathroom_codes.length > 0)
-    );
-    displayCoffeeShops(mappableCoffeeShops);
+    const showAllLocationsCheckbox = document.getElementById('show-all-locations');
+    let shopsToDisplayOnMap;
+
+    if (showAllLocationsCheckbox.checked) {
+        shopsToDisplayOnMap = allCoffeeShops;
+    } else {
+        shopsToDisplayOnMap = allCoffeeShops.filter(shop =>
+            (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
+            (shop.bathroom_codes && shop.bathroom_codes.length > 0)
+        );
+    }
+    // Clear existing markers before adding new ones
+    markers.clearLayers();
+    displayCoffeeShops(shopsToDisplayOnMap);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -237,6 +243,9 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('sidebar').classList.toggle('sidebar-open');
         map.invalidateSize(); // Invalidate map size after sidebar toggle
     });
+
+    // Event listener for the new checkbox
+    document.getElementById('show-all-locations').addEventListener('change', updateMarkers);
 
     window.onload = function() {
     map.invalidateSize();
