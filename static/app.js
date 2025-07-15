@@ -3,6 +3,15 @@ let allCoffeeShops = [];
 let markers;
 let map;
 
+function escapeHtml(unsafe) {
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 function createPopupContent(shop) {
     let content = `<b>${shop.name}</b><br><small>${shop.address}</small>`
 
@@ -15,7 +24,7 @@ function createPopupContent(shop) {
 
             content += `
                 <div>
-                    <span>${code.code} (${code.votes} vote${(code.votes === 1 || code.votes === 0) ? '' : 's'})</span>
+                    <span>${escapeHtml(code.code)} (${code.votes} vote${(code.votes === 1 || code.votes === 0) ? '' : 's'})</span>
                     <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'upvote', ${code.id})">👍</button>
                     <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'downvote', ${code.id})">👎</button>
                 </div>`;
@@ -40,7 +49,7 @@ function createPopupContent(shop) {
 
             content += `
                 <div>
-                    <span>${wifi.password} (${wifi.votes} vote${(wifi.votes === 1 || wifi.votes === 0) ? '' : 's'})</span>
+                    <span>${escapeHtml(wifi.password)} (${wifi.votes} vote${(wifi.votes === 1 || wifi.votes === 0) ? '' : 's'})</span>
                     <button class="copy-button" onclick="copyToClipboard('${wifi.password}')">📋</button>
                     <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
                     <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
