@@ -244,6 +244,15 @@ document.addEventListener('DOMContentLoaded', function () {
         map.invalidateSize(); // Invalidate map size after sidebar toggle
     });
 
+    // Close sidebar when clicking on the map
+    map.on('click', function() {
+        var sidebar = document.getElementById('sidebar');
+        if (sidebar.classList.contains('sidebar-open')) {
+            sidebar.classList.remove('sidebar-open');
+            map.invalidateSize(); // Invalidate map size after sidebar toggle
+        }
+    });
+
     // Event listener for the new checkbox
     document.getElementById('show-all-locations').addEventListener('change', updateMarkers);
 
