@@ -61,7 +61,7 @@ function createPopupContent(shop) {
 
     content += `
         <div class="suggestion-form">
-            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16" oninput="this.value = this.value.replace(/\s/g, '');">
+            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16" ">
             <button onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Suggest</button>
         </div>
     `;
@@ -289,8 +289,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     map.on('locationfound', function(e) {
         var radius = e.accuracy;
-        L.marker(e.latlng).addTo(map)
-            .bindPopup("You are within " + radius + " meters from this point").openPopup();
         L.circle(e.latlng, radius).addTo(map);
     });
 

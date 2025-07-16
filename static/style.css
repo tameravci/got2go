@@ -153,6 +153,7 @@ body {
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     position: relative; /* For positioning the toggle button */
     z-index: 1002; /* Ensure header is on top */
+    text-align: center;
 }
 
 #main-header h1 {
