@@ -236,6 +236,55 @@ document.addEventListener('DOMContentLoaded', function () {
     // Hide clear button initially
     document.getElementById('clear-search').style.display = 'none';
 
+    // PWA Installation Logic
+    console.log("PWA logic script loaded.");
+    if ('serviceWorker' in navigator) {
+        console.log("Service Worker is supported by the browser.");
+        navigator.serviceWorker.register('/sw.js')
+        .then(function(registration) {
+            console.log('Service Worker registered successfully! Scope:', registration.scope);
+        }).catch(function(error) {
+            console.error('Service Worker registration failed:', error);
+        });
+    } else {
+        console.log("Service Worker is NOT supported by the browser.");
+    }
+
+    let deferredPrompt;
+    const installButton = document.getElementById('install-app-button');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+        console.log("'beforeinstallprompt' event fired.");
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later.
+        deferredPrompt = e;
+        // Update UI to notify the user they can install the PWA
+        console.log("Install button should now be visible.");
+        installButton.style.display = 'block';
+
+        installButton.addEventListener('click', (e) => {
+            console.log("Install button clicked.");
+            // hide our user interface that shows our A2HS button
+            installButton.style.display = 'none';
+            // Show the prompt
+            deferredPrompt.prompt();
+            // Wait for the user to respond to the prompt
+            deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('User accepted the A2HS prompt');
+                } else {
+                    console.log('User dismissed the A2HS prompt');
+                }
+                deferredPrompt = null;
+            });
+        });
+    });
+
+    window.addEventListener('appinstalled', (evt) => {
+        console.log('PWA was installed.');
+    });
+
     // Welcome Modal Logic
     const welcomeModal = document.getElementById('welcome-modal');
     const letsGoButton = document.getElementById('lets-go-button');

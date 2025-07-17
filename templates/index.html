@@ -7,6 +7,12 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Got 2 Go Seattle">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo-toilet.png') }}">
 </head>
 <body>
     <div id="loading-indicator">
@@ -39,6 +45,7 @@
         <button id="toggle-sidebar-header" class="sidebar-toggle-header">☰</button>
         <img src="{{ url_for('static', filename='logo-toilet.png') }}" alt="Got2GoSEA Logo" class="header-logo">
         <h1>Got2GoSEA</h1>
+        <button id="install-app-button" style="display:none;">Install App</button>
         <a href="https://buymeacoffee.com/tameravci" target="_blank" class="buy-me-a-coffee-link">Buy Me a Coffee</a>
     </header>
     <div id="content-container">

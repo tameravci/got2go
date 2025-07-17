@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template, session, make_response
+from flask import Flask, jsonify, request, render_template, session, make_response, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -161,6 +161,12 @@ def get_coffee_shop(shop_id):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/sw.js')
+def service_worker():
+    response = make_response(send_from_directory('static', 'sw.js'))
+    response.headers['Content-Type'] = 'application/javascript'
+    return response
 
 @app.route('/api/vote', methods=['POST'])
 def vote():
