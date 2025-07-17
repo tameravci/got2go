@@ -360,6 +360,13 @@ body {
     margin-right: 5px; /* Space between text and buttons */
 }
 
+.vote-count {
+    margin-left: 5px;
+    margin-right: 5px;
+    font-weight: bold;
+    color: #333;
+}
+
 .leaflet-popup-content button {
     margin-left: 8px;
     padding: 3px 7px; /* Adjusted padding */

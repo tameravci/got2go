@@ -24,7 +24,8 @@ function createPopupContent(shop) {
 
             content += `
                 <div>
-                    <span class="popup-item-text">${escapeHtml(code.code)} (${code.votes > 0 ? '+' : ''}${code.votes})</span>
+                    <span class="popup-item-text">${escapeHtml(code.code)}</span>
+                    <span class="vote-count">${code.votes >= 0 ? '❤️' : '💔'} ${code.votes}</span>
                     <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'upvote', ${code.id})">👍</button>
                     <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'downvote', ${code.id})">👎</button>
                 </div>`;
@@ -49,7 +50,8 @@ function createPopupContent(shop) {
 
             content += `
                 <div>
-                    <span class="popup-item-text">${escapeHtml(wifi.password)} (${wifi.votes > 0 ? '+' : ''}${wifi.votes})</span>
+                    <span class="popup-item-text">${escapeHtml(wifi.password)}</span>
+                    <span class="vote-count">${wifi.votes >= 0 ? '❤️' : '💔'} ${wifi.votes}</span>
                     <button class="copy-button" onclick="copyToClipboard('${wifi.password}')">📋</button>
                     <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
                     <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
