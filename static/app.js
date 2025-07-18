@@ -346,6 +346,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Geolocation button
     document.getElementById('find-me-button').addEventListener('click', function() {
+        document.getElementById('nearby-spinner').style.display = 'flex';
         map.locate({setView: true, maxZoom: 16});
     });
 
@@ -363,10 +364,12 @@ document.addEventListener('DOMContentLoaded', function () {
         markers.clearLayers();
         populateSidebar(nearbyShops);
         displayCoffeeShops(nearbyShops);
+        document.getElementById('nearby-spinner').style.display = 'none';
     });
 
     map.on('locationerror', function(e) {
         showToast(e.message);
+        document.getElementById('nearby-spinner').style.display = 'none';
     });
 
     window.onload = function() {
