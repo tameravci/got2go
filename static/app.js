@@ -173,6 +173,17 @@ function updateMarkers() {
     displayCoffeeShops(shopsToDisplayOnMap);
 }
 
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 3958.8; // Radius of the Earth in miles
+    const rlat1 = lat1 * (Math.PI/180); // Convert degrees to radians
+    const rlat2 = lat2 * (Math.PI/180); // Convert degrees to radians
+    const difflat = rlat2 - rlat1; // Radian difference (latitudes)
+    const difflon = (lon2 - lon1) * (Math.PI/180); // Radian difference (longitudes)
+
+    const d = 2 * R * Math.asin(Math.sqrt(Math.sin(difflat / 2) * Math.sin(difflat / 2) + Math.cos(rlat1) * Math.cos(rlat2) * Math.sin(difflon / 2) * Math.sin(difflon / 2)));
+    return d;
+}
+
 function debounce(func, delay) {
     let timeout;
     return function(...args) {
@@ -341,6 +352,17 @@ document.addEventListener('DOMContentLoaded', function () {
     map.on('locationfound', function(e) {
         var radius = e.accuracy;
         L.circle(e.latlng, radius).addTo(map);
+
+        const userLat = e.latlng.lat;
+        const userLng = e.latlng.lng;
+        const nearbyShops = allCoffeeShops.filter(shop => {
+            const distance = haversineDistance(userLat, userLng, shop.lat, shop.lng);
+            return distance <= 0.3; // 0.2-mile radius
+        });
+
+        markers.clearLayers();
+        populateSidebar(nearbyShops);
+        displayCoffeeShops(nearbyShops);
     });
 
     map.on('locationerror', function(e) {
