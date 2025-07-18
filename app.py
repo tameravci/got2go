@@ -2,15 +2,33 @@ from flask import Flask, jsonify, request, render_template, session, make_respon
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+import sentry_sdk
 import os
 import time
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from datetime import datetime, timedelta
 
+
+sentry_sdk.init(
+    dsn="http://ab01eb3c357aa7bf4ff8bb4a8c7fc10b@localhost:9000/3",
+    # Add data like request headers and IP for users,
+    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+    send_default_pii=True,
+    traces_sample_rate=1.0
+)
+
 app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a_very_secret_key_that_should_be_in_env_vars')
+
+# In-memory cache for the version
+__version__ = str(int(time.time()))
+
+@app.context_processor
+def inject_version():
+    global __version__
+    return dict(version=__version__)
 
 RATE_LIMIT_WINDOW = 600  # 10 minutes in seconds
 RATE_LIMIT_MAX_REQUESTS = 10
