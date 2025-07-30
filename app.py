@@ -20,7 +20,7 @@ sentry_sdk.init(
 
 app = Flask(__name__)
 CORS(app)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'a_very_secret_key_that_should_be_in_env_vars')
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 
 # In-memory cache for the version
 __version__ = str(int(time.time()))
