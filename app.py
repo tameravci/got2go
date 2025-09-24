@@ -2,21 +2,11 @@ from flask import Flask, jsonify, request, render_template, session, make_respon
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-import sentry_sdk
 import os
 import time
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from datetime import datetime, timedelta
-
-
-sentry_sdk.init(
-    dsn="http://ab01eb3c357aa7bf4ff8bb4a8c7fc10b@localhost:9000/3",
-    # Add data like request headers and IP for users,
-    # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
-    send_default_pii=True,
-    traces_sample_rate=1.0
-)
 
 app = Flask(__name__)
 CORS(app)
@@ -312,4 +302,4 @@ def suggest():
     return response
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
