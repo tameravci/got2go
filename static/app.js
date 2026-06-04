@@ -1,7 +1,8 @@
-const API_BASE_URL = 'https://got2gosea.com';
+const API_BASE_URL = ''; // same-origin: works on prod, piku, localhost
 let allCoffeeShops = [];
 let markers;
 let map;
+let userLocationLayer = null;
 
 function escapeHtml(unsafe) {
     return unsafe
@@ -12,114 +13,162 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-function createPopupContent(shop) {
-    let content = `<b>${shop.name}</b><br><small>${shop.address}</small>`
+function shopPinClass(shop) {
+    const hasWifi = shop.wifi_passwords && shop.wifi_passwords.length > 0;
+    const hasBathroom = shop.bathroom_codes && shop.bathroom_codes.length > 0;
+    if (hasWifi && hasBathroom) return 'pin pin-both';
+    if (hasWifi) return 'pin pin-wifi';
+    if (hasBathroom) return 'pin pin-bathroom';
+    return 'pin pin-empty';
+}
 
-    content += `<hr><h5>Bathroom Codes</h5>`;
+const PIN_SVG = '<svg viewBox="0 0 22 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M11 27.5 C 5 18, 0.5 14, 0.5 8 A 10.5 10.5 0 0 1 21.5 8 C 21.5 14, 17 18, 11 27.5 Z" />' +
+    '<circle cx="11" cy="9" r="3.6" />' +
+    '</svg>';
+
+function shopIcon(shop) {
+    return L.divIcon({
+        className: shopPinClass(shop),
+        iconSize: [22, 28],
+        iconAnchor: [11, 28],
+        popupAnchor: [0, -26],
+        html: PIN_SVG
+    });
+}
+
+function createPopupContent(shop) {
+    const hasAnything =
+        (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
+        (shop.bathroom_codes && shop.bathroom_codes.length > 0);
+
+    let content = `<div class="popup-header"><b>${escapeHtml(shop.name)}</b><br><small>${escapeHtml(shop.address || '')}</small></div>`;
+    if (!hasAnything) {
+        content += `<div class="popup-empty-callout">No codes here yet — be the first to add one!</div>`;
+    }
+
+    content += `<hr><h5>Bathroom codes</h5>`;
     const filteredBathroom = shop.bathroom_codes.filter(code => code.votes > -3);
     if (filteredBathroom.length > 0) {
         filteredBathroom.forEach(code => {
             const upvoteClass = code.user_vote === 'upvote' ? 'voted-up' : '';
             const downvoteClass = code.user_vote === 'downvote' ? 'voted-down' : '';
-
             content += `
-                <div>
-                    <span class="popup-item-text">${escapeHtml(code.code)}</span>
-                    <span class="vote-count">${code.votes >= 0 ? '❤️' : '💔'} ${code.votes}</span>
-                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'upvote', ${code.id})">👍</button>
-                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'bathroom_codes', 'downvote', ${code.id})">👎</button>
+                <div class="popup-row">
+                    <code class="popup-code">${escapeHtml(code.code)}</code>
+                    <span class="vote-count">${code.votes >= 0 ? '▲' : '▽'} ${code.votes}</span>
+                    <button class="vote-btn ${upvoteClass}" aria-label="Upvote" onclick="handleVote(${shop.id}, 'bathroom_codes', 'upvote', ${code.id})">👍</button>
+                    <button class="vote-btn ${downvoteClass}" aria-label="Downvote" onclick="handleVote(${shop.id}, 'bathroom_codes', 'downvote', ${code.id})">👎</button>
                 </div>`;
         });
     } else {
-        content += `<p>No bathroom codes yet.</p>`;
+        content += `<p class="popup-none">None yet.</p>`;
     }
 
     content += `
         <div class="suggestion-form">
             <input type="text" id="bathroom-suggestion-${shop.id}" placeholder="New code (digits, *, #)" pattern="[0-9*#]+" oninput="this.value = this.value.replace(/[^0-9*#]/g, '');" maxlength="12">
-            <button onclick="suggest(${shop.id}, 'bathroom_codes', 'bathroom-suggestion-${shop.id}')">Suggest</button>
+            <button class="suggest-btn" onclick="suggest(${shop.id}, 'bathroom_codes', 'bathroom-suggestion-${shop.id}')">Add</button>
         </div>
     `;
 
-    content += `<hr><h5>Wifi Passwords</h5>`;
+    content += `<hr><h5>Wi-Fi passwords</h5>`;
     const filteredWifi = shop.wifi_passwords.filter(wifi => wifi.votes > -3);
     if (filteredWifi.length > 0) {
         filteredWifi.forEach(wifi => {
             const upvoteClass = wifi.user_vote === 'upvote' ? 'voted-up' : '';
             const downvoteClass = wifi.user_vote === 'downvote' ? 'voted-down' : '';
-
             content += `
-                <div>
-                    <span class="popup-item-text">${escapeHtml(wifi.password)}</span>
-                    <span class="vote-count">${wifi.votes >= 0 ? '❤️' : '💔'} ${wifi.votes}</span>
-                    <button class="copy-button" onclick="copyToClipboard('${wifi.password}')">📋</button>
-                    <button class="${upvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
-                    <button class="${downvoteClass}" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
+                <div class="popup-row">
+                    <code class="popup-password">${escapeHtml(wifi.password)}</code>
+                    <span class="vote-count">${wifi.votes >= 0 ? '▲' : '▽'} ${wifi.votes}</span>
+                    <button class="copy-button" aria-label="Copy password" onclick="copyToClipboard('${escapeHtml(wifi.password).replace(/'/g, "\\'")}')">📋</button>
+                    <button class="vote-btn ${upvoteClass}" aria-label="Upvote" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
+                    <button class="vote-btn ${downvoteClass}" aria-label="Downvote" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
                 </div>`;
         });
     } else {
-        content += `<p>No wifi passwords yet.</p>`;
+        content += `<p class="popup-none">None yet.</p>`;
     }
 
     content += `
         <div class="suggestion-form">
-            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16" ">
-            <button onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Suggest</button>
+            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16">
+            <button class="suggest-btn" onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Add</button>
         </div>
     `;
 
     return content;
 }
 
+function shopCounts(shop) {
+    const w = (shop.wifi_passwords || []).length;
+    const b = (shop.bathroom_codes || []).length;
+    if (w === 0 && b === 0) return '';
+    const parts = [];
+    if (w > 0) parts.push(`<span class="count-pill count-wifi">📶 ${w}</span>`);
+    if (b > 0) parts.push(`<span class="count-pill count-bathroom">🚻 ${b}</span>`);
+    return `<div class="shop-counts">${parts.join(' ')}</div>`;
+}
+
 function populateSidebar(shopsToDisplay) {
     var shopListDiv = document.getElementById('shop-list');
-    shopListDiv.innerHTML = ''; // Clear existing list
+    shopListDiv.innerHTML = '';
 
-    // Sort shops alphabetically by name
+    if (shopsToDisplay.length === 0) {
+        shopListDiv.innerHTML = '<div class="empty-state">No shops match — try a broader search, or tap <strong>Find Nearby</strong>.</div>';
+        return;
+    }
+
     shopsToDisplay.sort((a, b) => a.name.localeCompare(b.name));
 
     shopsToDisplay.forEach(function (shop) {
         var listItem = document.createElement('div');
         listItem.className = 'shop-list-item';
-        listItem.innerHTML = `<b>${shop.name}</b><br><small>${shop.address}</small>`;
+        listItem.innerHTML = `
+            <div class="shop-list-main">
+                <b>${escapeHtml(shop.name)}</b>
+                <small>${escapeHtml(shop.address || '')}</small>
+            </div>
+            ${shopCounts(shop)}
+        `;
         listItem.onclick = function() {
-            // Find the actual shop object from allCoffeeShops (important for consistent data)
             const clickedShop = allCoffeeShops.find(s => s.id === shop.id);
-            if (!clickedShop) return; // Should not happen
+            if (!clickedShop) return;
 
             let targetMarker = null;
-            // Check if a marker for this shop already exists on the map
             markers.eachLayer(function(layer) {
-                if (layer.shopId === clickedShop.id) {
-                    targetMarker = layer;
-                }
+                if (layer.shopId === clickedShop.id) targetMarker = layer;
             });
 
             if (!targetMarker) {
-                // If no marker exists, create one and add it to the map
-                targetMarker = L.marker([clickedShop.lat, clickedShop.lng]);
+                targetMarker = L.marker([clickedShop.lat, clickedShop.lng], { icon: shopIcon(clickedShop) });
                 targetMarker.shopId = clickedShop.id;
                 targetMarker.bindPopup(createPopupContent(clickedShop));
                 targetMarker.on('click', function() {
                     fetch(`${API_BASE_URL}/api/coffee_shops/${clickedShop.id}`)
-                        .then(response => response.json())
+                        .then(r => r.json())
                         .then(updatedShop => {
                             updateShopInAllCoffeeShops(updatedShop);
-                            refreshMarkerPopup(clickedShop.id);
+                            refreshMarker(clickedShop.id);
                         });
                 });
                 markers.addLayer(targetMarker);
             }
 
-            // Center the map on the clicked shop and open its popup
-            map.setView([clickedShop.lat, clickedShop.lng], 16); // Zoom to a reasonable level
-            targetMarker.openPopup();
+            map.flyTo([clickedShop.lat, clickedShop.lng], 17, { duration: 0.5 });
+            setTimeout(() => {
+                if (markers.zoomToShowLayer) {
+                    markers.zoomToShowLayer(targetMarker, () => targetMarker.openPopup());
+                } else {
+                    targetMarker.openPopup();
+                }
+            }, 250);
 
-            // Collapse sidebar if open
             var sidebar = document.getElementById('sidebar');
             if (sidebar.classList.contains('sidebar-open')) {
                 sidebar.classList.remove('sidebar-open');
-                map.invalidateSize(); // Invalidate map size after sidebar toggle
+                map.invalidateSize();
             }
         };
         shopListDiv.appendChild(listItem);
@@ -127,28 +176,22 @@ function populateSidebar(shopsToDisplay) {
 }
 
 function displayCoffeeShops(shopsToDisplayOnMap) {
-    // Do NOT clear layers here, as we want to preserve markers added by sidebar clicks
-    // markers.clearLayers(); 
-
     shopsToDisplayOnMap.forEach(function (shop) {
-        // Only add marker if it doesn't already exist
         let markerExists = false;
         markers.eachLayer(function(layer) {
-            if (layer.shopId === shop.id) {
-                markerExists = true;
-            }
+            if (layer.shopId === shop.id) markerExists = true;
         });
 
         if (!markerExists) {
-            var marker = L.marker([shop.lat, shop.lng]);
-            marker.shopId = shop.id; // Associate shop ID with marker
+            var marker = L.marker([shop.lat, shop.lng], { icon: shopIcon(shop) });
+            marker.shopId = shop.id;
             marker.bindPopup(createPopupContent(shop));
             marker.on('click', function() {
                 fetch(`${API_BASE_URL}/api/coffee_shops/${shop.id}`)
-                    .then(response => response.json())
+                    .then(r => r.json())
                     .then(updatedShop => {
                         updateShopInAllCoffeeShops(updatedShop);
-                        refreshMarkerPopup(shop.id);
+                        refreshMarker(shop.id);
                     });
             });
             markers.addLayer(marker);
@@ -157,31 +200,24 @@ function displayCoffeeShops(shopsToDisplayOnMap) {
 }
 
 function updateMarkers() {
-    const showAllLocationsCheckbox = document.getElementById('show-all-locations');
-    let shopsToDisplayOnMap;
-
-    if (showAllLocationsCheckbox.checked) {
-        shopsToDisplayOnMap = allCoffeeShops;
-    } else {
-        shopsToDisplayOnMap = allCoffeeShops.filter(shop =>
-            (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
-            (shop.bathroom_codes && shop.bathroom_codes.length > 0)
-        );
-    }
-    // Clear existing markers before adding new ones
+    const showAll = document.getElementById('show-all-locations').checked;
+    const shopsToDisplay = showAll
+        ? allCoffeeShops
+        : allCoffeeShops.filter(s =>
+            (s.wifi_passwords && s.wifi_passwords.length > 0) ||
+            (s.bathroom_codes && s.bathroom_codes.length > 0));
     markers.clearLayers();
-    displayCoffeeShops(shopsToDisplayOnMap);
+    displayCoffeeShops(shopsToDisplay);
 }
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
-    const R = 3958.8; // Radius of the Earth in miles
-    const rlat1 = lat1 * (Math.PI/180); // Convert degrees to radians
-    const rlat2 = lat2 * (Math.PI/180); // Convert degrees to radians
-    const difflat = rlat2 - rlat1; // Radian difference (latitudes)
-    const difflon = (lon2 - lon1) * (Math.PI/180); // Radian difference (longitudes)
-
-    const d = 2 * R * Math.asin(Math.sqrt(Math.sin(difflat / 2) * Math.sin(difflat / 2) + Math.cos(rlat1) * Math.cos(rlat2) * Math.sin(difflon / 2) * Math.sin(difflon / 2)));
-    return d;
+    const R = 3958.8;
+    const rlat1 = lat1 * (Math.PI/180);
+    const rlat2 = lat2 * (Math.PI/180);
+    const difflat = rlat2 - rlat1;
+    const difflon = (lon2 - lon1) * (Math.PI/180);
+    return 2 * R * Math.asin(Math.sqrt(
+        Math.sin(difflat / 2) ** 2 + Math.cos(rlat1) * Math.cos(rlat2) * Math.sin(difflon / 2) ** 2));
 }
 
 function debounce(func, delay) {
@@ -193,32 +229,33 @@ function debounce(func, delay) {
     };
 }
 
-// Debounced search function
 const debouncedSearch = debounce(function() {
     var searchTerm = this.value.toLowerCase();
-    var filteredShops = allCoffeeShops.filter(shop => 
-        shop.name.toLowerCase().includes(searchTerm) || 
-        shop.address.toLowerCase().includes(searchTerm)
-    );
-    populateSidebar(filteredShops); // Update sidebar with filtered shops
+    var filteredShops = allCoffeeShops.filter(shop =>
+        shop.name.toLowerCase().includes(searchTerm) ||
+        (shop.address || '').toLowerCase().includes(searchTerm));
+    populateSidebar(filteredShops);
 
-    // Filter for mappable shops among the search results
-    const mappableFilteredShops = filteredShops.filter(shop =>
-        (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
-        (shop.bathroom_codes && shop.bathroom_codes.length > 0)
-    );
-    displayCoffeeShops(mappableFilteredShops); // Update map markers with filtered mappable shops
+    const mappable = filteredShops.filter(s =>
+        (s.wifi_passwords && s.wifi_passwords.length > 0) ||
+        (s.bathroom_codes && s.bathroom_codes.length > 0));
+    markers.clearLayers();
+    displayCoffeeShops(mappable);
 
-    // Toggle clear button visibility
     document.getElementById('clear-search').style.display = this.value ? 'inline-block' : 'none';
-}, 300); // 300ms debounce delay
+}, 300);
 
 document.addEventListener('DOMContentLoaded', function () {
     const loadingIndicator = document.getElementById('loading-indicator');
-    loadingIndicator.style.display = 'flex'; // Show loading indicator
+    loadingIndicator.style.display = 'flex';
 
-    map = L.map('map').setView([47.6062, -122.3321], 13); // Set initial view to central Seattle
-    markers = L.featureGroup().addTo(map); // Layer to manage markers
+    map = L.map('map').setView([47.6062, -122.3321], 13);
+    markers = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true,
+        disableClusteringAtZoom: 17,
+        maxClusterRadius: 50
+    }).addTo(map);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -228,77 +265,40 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch(`${API_BASE_URL}/api/coffee_shops`)
         .then(response => response.json())
         .then(coffeeShops => {
-            allCoffeeShops = coffeeShops; // Store all shops
-            populateSidebar(allCoffeeShops); // Populate sidebar with all shops
-            updateMarkers(); // Display mappable markers on the map
-            // Delay invalidateSize to ensure map container is fully rendered
-            setTimeout(function(){
-                map.invalidateSize();
-            }, 500); // Increased delay to 500ms
-            loadingIndicator.style.display = 'none'; // Hide loading indicator
+            allCoffeeShops = coffeeShops;
+            populateSidebar(allCoffeeShops);
+            updateMarkers();
+            setTimeout(() => map.invalidateSize(), 500);
+            loadingIndicator.style.display = 'none';
         });
 
     document.getElementById('search-input').addEventListener('input', debouncedSearch);
 
     document.getElementById('clear-search').addEventListener('click', function() {
         document.getElementById('search-input').value = '';
-        // Trigger the input event to re-filter and display all shops
         document.getElementById('search-input').dispatchEvent(new Event('input'));
     });
-
-    // Hide clear button initially
     document.getElementById('clear-search').style.display = 'none';
 
-    // PWA Installation Logic
-    console.log("PWA logic script loaded.");
     if ('serviceWorker' in navigator) {
-        console.log("Service Worker is supported by the browser.");
-        navigator.serviceWorker.register('/sw.js')
-        .then(function(registration) {
-            console.log('Service Worker registered successfully! Scope:', registration.scope);
-        }).catch(function(error) {
-            console.error('Service Worker registration failed:', error);
-        });
-    } else {
-        console.log("Service Worker is NOT supported by the browser.");
+        navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW failed:', err));
     }
 
     let deferredPrompt;
     const installButton = document.getElementById('install-app-button');
 
     window.addEventListener('beforeinstallprompt', (e) => {
-        console.log("'beforeinstallprompt' event fired.");
-        // Prevent the mini-infobar from appearing on mobile
         e.preventDefault();
-        // Stash the event so it can be triggered later.
         deferredPrompt = e;
-        // Update UI to notify the user they can install the PWA
-        console.log("Install button should now be visible.");
         installButton.style.display = 'block';
-
-        installButton.addEventListener('click', (e) => {
-            console.log("Install button clicked.");
-            // hide our user interface that shows our A2HS button
+        installButton.addEventListener('click', () => {
             installButton.style.display = 'none';
-            // Show the prompt
             deferredPrompt.prompt();
-            // Wait for the user to respond to the prompt
-            deferredPrompt.userChoice.then((choiceResult) => {
-                if (choiceResult.outcome === 'accepted') {
-                    console.log('User accepted the A2HS prompt');
-                } else {
-                    console.log('User dismissed the A2HS prompt');
-                }
-                deferredPrompt = null;
-            });
+            deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
         });
     });
 
-    window.addEventListener('appinstalled', (evt) => {
-        console.log('PWA was installed.');
-    });
-
-    // Welcome Modal Logic
+    // Welcome modal
     const welcomeModal = document.getElementById('welcome-modal');
     const letsGoButton = document.getElementById('lets-go-button');
     const dontShowWelcomeAgainCheckbox = document.getElementById('dont-show-welcome-again');
@@ -312,69 +312,61 @@ document.addEventListener('DOMContentLoaded', function () {
             localStorage.removeItem('hasSeenWelcomeModal');
         }
     }
-
-    if (hasSeenWelcome !== 'true') {
-        welcomeModal.style.display = 'flex';
-    }
-
+    if (hasSeenWelcome !== 'true') welcomeModal.style.display = 'flex';
     letsGoButton.addEventListener('click', dismissWelcomeModal);
-
-    // Close modal if user clicks outside the modal content
     welcomeModal.addEventListener('click', (event) => {
-        if (event.target === welcomeModal) {
-            dismissWelcomeModal();
-        }
+        if (event.target === welcomeModal) dismissWelcomeModal();
     });
 
-    // Toggle sidebar on mobile
     document.getElementById('toggle-sidebar-header').addEventListener('click', function() {
         document.getElementById('sidebar').classList.toggle('sidebar-open');
-        map.invalidateSize(); // Invalidate map size after sidebar toggle
+        map.invalidateSize();
     });
 
-    // Close sidebar when clicking on the map
     map.on('click', function() {
         var sidebar = document.getElementById('sidebar');
         if (sidebar.classList.contains('sidebar-open')) {
             sidebar.classList.remove('sidebar-open');
-            map.invalidateSize(); // Invalidate map size after sidebar toggle
+            map.invalidateSize();
         }
     });
 
-    // Event listener for the new checkbox
     document.getElementById('show-all-locations').addEventListener('change', updateMarkers);
 
-    // Geolocation button
     document.getElementById('find-me-button').addEventListener('click', function() {
         document.getElementById('nearby-spinner').style.display = 'flex';
-        map.locate({setView: true, maxZoom: 16});
+        map.locate({ setView: true, maxZoom: 16 });
     });
 
     map.on('locationfound', function(e) {
-        var radius = e.accuracy;
-        L.circle(e.latlng, radius).addTo(map);
+        if (userLocationLayer) {
+            map.removeLayer(userLocationLayer);
+        }
+        userLocationLayer = L.circle(e.latlng, {
+            radius: e.accuracy,
+            color: '#2563eb',
+            fillColor: '#2563eb',
+            fillOpacity: 0.08,
+            weight: 1.5
+        }).addTo(map);
 
-        const userLat = e.latlng.lat;
-        const userLng = e.latlng.lng;
-        const nearbyShops = allCoffeeShops.filter(shop => {
-            const distance = haversineDistance(userLat, userLng, shop.lat, shop.lng);
-            return distance <= 0.3; // 0.2-mile radius
-        });
+        const nearbyShops = allCoffeeShops.filter(shop =>
+            haversineDistance(e.latlng.lat, e.latlng.lng, shop.lat, shop.lng) <= 0.3);
 
         markers.clearLayers();
         populateSidebar(nearbyShops);
         displayCoffeeShops(nearbyShops);
         document.getElementById('nearby-spinner').style.display = 'none';
+
+        if (nearbyShops.length === 0) {
+            showToast("No coffee shops within 0.3 miles of you.");
+        }
     });
 
     map.on('locationerror', function(e) {
         showToast(e.message);
         document.getElementById('nearby-spinner').style.display = 'none';
     });
-
-    window.onload = function() {
-    map.invalidateSize();
-    };
 });
 
 function showToast(message) {
@@ -382,44 +374,29 @@ function showToast(message) {
     if (toast) {
         toast.className = "show";
         toast.innerHTML = message;
-        setTimeout(function(){ toast.className = toast.className.replace("show", ""); }, 3000);
+        setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
     }
 }
 
 function copyToClipboard(text) {
-    // Modern browsers with secure context (HTTPS)
     if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(text).then(function() {
-            showToast("Copied to clipboard!");
-        }, function(err) {
-            showToast("Failed to copy.");
-            console.error('Async: Could not copy text: ', err);
-        });
+        navigator.clipboard.writeText(text).then(
+            () => showToast("Copied!"),
+            () => showToast("Failed to copy."));
     } else {
-        // Fallback for older browsers or insecure contexts (HTTP)
         let textArea = document.createElement("textarea");
         textArea.value = text;
-        // Make the textarea out of sight
         textArea.style.position = "fixed";
         textArea.style.top = "-9999px";
         textArea.style.left = "-9999px";
-
         document.body.appendChild(textArea);
         textArea.focus();
         textArea.select();
-
         try {
-            let successful = document.execCommand('copy');
-            if (successful) {
-                showToast("Copied to clipboard!");
-            } else {
-                showToast("Failed to copy.");
-            }
+            document.execCommand('copy') ? showToast("Copied!") : showToast("Failed to copy.");
         } catch (err) {
             showToast("Failed to copy.");
-            console.error('Fallback: Oops, unable to copy', err);
         }
-
         document.body.removeChild(textArea);
     }
 }
@@ -430,16 +407,13 @@ function handleVote(shopId, itemType, voteType, itemId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shop_id: shopId, item_type: itemType, vote_type: voteType, item_id: itemId })
     }).then(response => {
-        if (response.ok) {
-            return response.json();
-        } else {
-            response.json().then(data => showToast('Error: ' + data.error));
-            return Promise.reject('Error voting');
-        }
+        if (response.ok) return response.json();
+        response.json().then(data => showToast('Error: ' + data.error));
+        return Promise.reject('Error voting');
     }).then(updatedShop => {
         if (updatedShop) {
             updateShopInAllCoffeeShops(updatedShop);
-            refreshMarkerPopup(shopId);
+            refreshMarker(shopId);
         }
     });
 }
@@ -450,45 +424,37 @@ function suggest(shopId, itemType, inputId) {
         showToast('Please enter a value.');
         return;
     }
-
     fetch(`${API_BASE_URL}/api/suggest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shop_id: shopId, item_type: itemType, item_value: itemValue })
     }).then(response => {
-        if (response.ok) {
-            return response.json();
-        } else {
-            response.json().then(data => showToast('Error: ' + data.error));
-            return Promise.reject('Error suggesting item');
-        }
+        if (response.ok) return response.json();
+        response.json().then(data => showToast('Error: ' + data.error));
+        return Promise.reject('Error suggesting item');
     }).then(data => {
         if (data) {
-            const updatedShop = data.shop;
-            updateShopInAllCoffeeShops(updatedShop);
-            refreshMarkerPopup(shopId);
+            updateShopInAllCoffeeShops(data.shop);
+            refreshMarker(shopId);
             document.getElementById(inputId).value = '';
+            showToast('Added — thanks!');
         }
     });
 }
 
 function updateShopInAllCoffeeShops(updatedShop) {
     const index = allCoffeeShops.findIndex(shop => shop.id === updatedShop.id);
-    if (index !== -1) {
-        allCoffeeShops[index] = updatedShop;
-    }
+    if (index !== -1) allCoffeeShops[index] = updatedShop;
 }
 
-function refreshMarkerPopup(shopId) {
+function refreshMarker(shopId) {
     const shop = allCoffeeShops.find(s => s.id === shopId);
-    if (shop) {
-        markers.eachLayer(function (layer) {
-            if (layer.shopId === shopId) {
-                layer.setPopupContent(createPopupContent(shop));
-                if (layer.isPopupOpen()) {
-                    layer.openPopup();
-                }
-            }
-        });
-    }
+    if (!shop) return;
+    markers.eachLayer(function (layer) {
+        if (layer.shopId === shopId) {
+            layer.setIcon(shopIcon(shop));
+            layer.setPopupContent(createPopupContent(shop));
+            if (layer.isPopupOpen && layer.isPopupOpen()) layer.openPopup();
+        }
+    });
 }

@@ -36,7 +36,7 @@ def inject_version():
                 site_description=SITE_DESCRIPTION, site_tagline=SITE_TAGLINE)
 
 RATE_LIMIT_WINDOW = 600  # 10 minutes in seconds
-RATE_LIMIT_MAX_REQUESTS = 10
+RATE_LIMIT_MAX_WRITES = 30  # POST-only: votes + suggestions
 ip_request_timestamps = {}
 
 # Database Configuration
@@ -171,23 +171,18 @@ class Vote(db.Model):
     def __repr__(self):
         return f'<Vote {self.user_id} on {self.item_type}:{self.item_id} as {self.vote_type}>'
 
-#@app.before_request
+@app.before_request
 def rate_limit():
+    # Reads stay free so the map and crawler-facing surfaces aren't throttled.
+    if request.method != 'POST':
+        return
     ip = request.remote_addr
-    current_time = time.time()
-
-    if ip not in ip_request_timestamps:
-        ip_request_timestamps[ip] = []
-
-    # Remove timestamps older than the window
-    ip_request_timestamps[ip] = [
-        t for t in ip_request_timestamps[ip] if current_time - t < RATE_LIMIT_WINDOW
-    ]
-
-    if len(ip_request_timestamps[ip]) >= RATE_LIMIT_MAX_REQUESTS:
+    now = time.time()
+    timestamps = [t for t in ip_request_timestamps.get(ip, []) if now - t < RATE_LIMIT_WINDOW]
+    if len(timestamps) >= RATE_LIMIT_MAX_WRITES:
         return jsonify({"error": "Too many requests. Please try again later."}), 429
-
-    ip_request_timestamps[ip].append(current_time)
+    timestamps.append(now)
+    ip_request_timestamps[ip] = timestamps
 
 @app.route('/api/coffee_shops', methods=['GET'])
 def get_coffee_shops():
@@ -538,6 +533,8 @@ def suggest():
             return jsonify({"error": "Bathroom code cannot contain spaces."}), 400
         if len(item_value) > 12:
             return jsonify({"error": "Bathroom code cannot be longer than 12 characters."}), 400
+        if not item_value or not all(c in '0123456789*#' for c in item_value):
+            return jsonify({"error": "Bathroom code can only contain digits, * and #."}), 400
         Model = BathroomCode
         item_type_str = 'bathroom_code'
         existing_item = Model.query.filter_by(coffee_shop_id=shop_id, code=item_value).first()

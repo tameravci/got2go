@@ -8,7 +8,10 @@
     <meta name="keywords" content="Seattle coffee shop wifi password, Seattle bathroom code, cafe wifi Seattle, public restroom code Seattle, free wifi Seattle">
     <link rel="canonical" href="{{ url_for('index', _external=True) }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
+    <meta name="theme-color" content="#2563eb">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=version) }}">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
 
@@ -61,23 +64,33 @@
     </div>
     <div id="welcome-modal" class="modal">
         <div class="modal-content">
-            <h2>Welcome to Got2GoSEA!</h2>
             <div class="modal-logo-container">
                 <img src="{{ url_for('static', filename='logo-toilet.png') }}" alt="Got2GoSEA Logo" class="modal-logo">
             </div>
-            <ul>
-                <li>Is it a bathroom emergency? Or are you simply an introverted Seattleite who avoids talking to people? Either way, we got you covered</li>
-                <li>We crowdsource all the Wi-Fi and bathroom codes, and keep them up to date</li>
-                <li>Shops with existing Wi-Fi or bathroom codes are marked on the map. To suggest a code for a new store, use the left sidebar to find the location</li>
-                <li>Upvote the codes that helped you and downvote the ones that are too old!</li>
-            </ul>
-            <p>Enjoy!</p>
+            <h2>Welcome to Got2GoSEA</h2>
+            <p class="modal-tagline">Bathroom emergency? Need Wi-Fi? Crowdsourced codes for Seattle coffee shops.</p>
+
+            <h3 class="modal-section-title">How to find a code</h3>
+            <ol class="modal-steps">
+                <li>Tap <strong>Find Nearby</strong> (the crosshair button on the map). Every shop within 0.3 miles drops a pin.</li>
+                <li>Pin colors:
+                    <span class="legend-row">
+                        <span class="legend-chip"><span class="legend-dot dot-both"></span>both</span>
+                        <span class="legend-chip"><span class="legend-dot dot-wifi"></span>Wi-Fi</span>
+                        <span class="legend-chip"><span class="legend-dot dot-bathroom"></span>bathroom</span>
+                        <span class="legend-chip"><span class="legend-dot dot-empty"></span>nothing yet</span>
+                    </span>
+                </li>
+                <li>Tap any pin to grab the codes — or add yours to a gray pin so the next person finds it.</li>
+                <li>Upvote codes that work. Downvote stale ones.</li>
+            </ol>
+
             <div class="modal-footer">
                 <label>
                     <input type="checkbox" id="dont-show-welcome-again">
                     Don't show this again
                 </label>
-                <button id="lets-go-button" class="lets-go-button">LET ME IN I GOT 2 GO !!!</button>
+                <button id="lets-go-button" class="lets-go-button">I got 2 go</button>
             </div>
         </div>
     </div>
@@ -108,12 +121,19 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-crosshair"><circle cx="12" cy="12" r="10"></circle><line x1="22" y1="12" x2="18" y2="12"></line><line x1="6" y1="12" x2="2" y2="12"></line><line x1="12" y1="6" x2="12" y2="2"></line><line x1="12" y1="22" x2="12" y2="18"></line></svg>
                 <span>Find Nearby</span>
             </button>
+            <div id="map-legend" aria-hidden="true">
+                <span class="legend-chip"><span class="legend-dot dot-both"></span>both</span>
+                <span class="legend-chip"><span class="legend-dot dot-wifi"></span>Wi-Fi</span>
+                <span class="legend-chip"><span class="legend-dot dot-bathroom"></span>bathroom</span>
+                <span class="legend-chip"><span class="legend-dot dot-empty"></span>nothing yet — add!</span>
+            </div>
             <div id="nearby-spinner" class="spinner-overlay" style="display: none;">
                 <div class="spinner"></div>
             </div>
         </div>
     </div>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="{{ url_for('static', filename='app.js', v=version) }}"></script>
     <div id="toast"></div>
     
