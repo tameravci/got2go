@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const loadingIndicator = document.getElementById('loading-indicator');
     loadingIndicator.style.display = 'flex';
 
-    map = L.map('map').setView([47.6062, -122.3321], 13);
+    map = L.map('map', { maxZoom: 19 }).setView([47.6062, -122.3321], 13);
     markers = L.markerClusterGroup({
         showCoverageOnHover: false,
         spiderfyOnMaxZoom: true,
