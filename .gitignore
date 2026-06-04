@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+app.db
+*.sqlite
+osm_coffee_shops_cache.json
+.venv/
+venv/

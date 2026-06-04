@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% set wifi_summary = (wifi[0].password if wifi else None) %}
+    {% set bath_summary = (bathroom[0].code if bathroom else None) %}
+    <title>{{ shop.name }} - Wi-Fi password & bathroom code | {{ site_name }}</title>
+    <meta name="description" content="{{ shop.name }} ({{ shop.address }}): crowdsourced Wi-Fi password{% if wifi_summary %} ({{ wifi_summary }}){% endif %} and bathroom code{% if bath_summary %} ({{ bath_summary }}){% endif %} for this Seattle spot, community-voted and kept up to date by {{ site_name }}.">
+    <link rel="canonical" href="{{ canonical }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
+
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="{{ site_name }}">
+    <meta property="og:title" content="{{ shop.name }} - Wi-Fi password & bathroom code">
+    <meta property="og:description" content="Crowdsourced Wi-Fi password and bathroom code for {{ shop.name }} in Seattle. Community-voted on {{ site_name }}.">
+    <meta property="og:url" content="{{ canonical }}">
+    <meta property="og:image" content="{{ url_for('static', filename='logo-toilet.png', _external=True) }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ shop.name }} - Wi-Fi & bathroom code">
+    <meta name="twitter:description" content="Crowdsourced Wi-Fi password and bathroom code for {{ shop.name }} in Seattle.">
+
+    <script type="application/ld+json">
+    {{ jsonld | tojson | safe }}
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "{{ site_name }}", "item": "{{ url_for('index', _external=True) }}"},
+        {"@type": "ListItem", "position": 2, "name": "Shops", "item": "{{ url_for('shops_directory', _external=True) }}"},
+        {"@type": "ListItem", "position": 3, "name": {{ shop.name | tojson }}, "item": {{ canonical | tojson }}}
+      ]
+    }
+    </script>
+
+    <style>
+        :root { color-scheme: light dark; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+               max-width: 720px; margin: 0 auto; padding: 1rem 1.25rem 4rem; line-height: 1.55; }
+        header.crumbs { font-size: .9rem; margin-bottom: 1rem; }
+        header.crumbs a { color: #0a66c2; text-decoration: none; }
+        h1 { margin-bottom: .25rem; }
+        .addr { color: #666; margin-top: 0; }
+        h2 { margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .25rem; }
+        ul.codes { list-style: none; padding: 0; }
+        ul.codes li { display: flex; align-items: baseline; gap: .75rem;
+                      padding: .5rem .75rem; border: 1px solid #e3e3e3; border-radius: 8px; margin-bottom: .5rem; }
+        ul.codes code { font-size: 1.15rem; font-weight: 600; }
+        .votes { color: #888; font-size: .85rem; margin-left: auto; }
+        .top { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+               background: #0a66c2; color: #fff; border-radius: 4px; padding: .1rem .4rem; }
+        .note { font-size: .85rem; color: #777; margin-top: 2rem; }
+        .cta a { color: #0a66c2; }
+    </style>
+</head>
+<body>
+    <header class="crumbs">
+        <a href="{{ url_for('index') }}">{{ site_name }}</a> &rsaquo;
+        <a href="{{ url_for('shops_directory') }}">Shops</a> &rsaquo;
+        <span>{{ shop.name }}</span>
+    </header>
+
+    <main>
+        <h1>{{ shop.name }}</h1>
+        <p class="addr">{{ shop.address }}</p>
+        <p>Crowdsourced Wi-Fi passwords and bathroom codes for <strong>{{ shop.name }}</strong>,
+           a coffee shop in Seattle, WA. Entries are community-voted on {{ site_name }};
+           the most-upvoted (most recently confirmed) appears first.</p>
+
+        <h2>Bathroom codes</h2>
+        {% if bathroom %}
+        <ul class="codes">
+            {% for bc in bathroom %}
+            <li>
+                {% if loop.first %}<span class="top">Top</span>{% endif %}
+                <code>{{ bc.code }}</code>
+                <span class="votes">{{ bc.votes }} vote{{ '' if bc.votes == 1 else 's' }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>No bathroom code reported yet.</p>
+        {% endif %}
+
+        <h2>Wi-Fi passwords</h2>
+        {% if wifi %}
+        <ul class="codes">
+            {% for wp in wifi %}
+            <li>
+                {% if loop.first %}<span class="top">Top</span>{% endif %}
+                <code>{{ wp.password }}</code>
+                <span class="votes">{{ wp.votes }} vote{{ '' if wp.votes == 1 else 's' }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>No Wi-Fi password reported yet.</p>
+        {% endif %}
+
+        <p class="cta">Vote on these codes or add a new one on the
+           <a href="{{ url_for('index') }}">interactive map</a>.
+           Machine-readable: <a href="{{ url_for('shop_detail_txt', shop_id=shop.id) }}">plain text</a> &middot;
+           <a href="{{ url_for('get_coffee_shop', shop_id=shop.id) }}">JSON</a>.</p>
+
+        <p class="note">These codes are crowdsourced and community-voted. They change
+           over time and may be out of date. Please use them respectfully and as a
+           paying customer where that is expected.</p>
+    </main>
+</body>
+</html>

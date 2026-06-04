@@ -1,8 +1,12 @@
-from flask import Flask, jsonify, request, render_template, session, make_response, send_from_directory
+from flask import (
+    Flask, jsonify, request, render_template, session, make_response,
+    send_from_directory, Response, url_for, abort, redirect
+)
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 import os
+import re
 import time
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -12,20 +16,28 @@ app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 
+# Human-readable site metadata used for SEO / LLM-citation surfaces.
+SITE_NAME = "Got2GoSEA"
+SITE_TAGLINE = "Crowdsourced Wi-Fi passwords & bathroom codes for Seattle coffee shops"
+SITE_DESCRIPTION = (
+    "Got2GoSEA is a free, community-maintained map of Seattle coffee shops, cafes "
+    "and bakeries with crowdsourced Wi-Fi passwords and bathroom door codes. Find "
+    "the nearest restroom code or guest Wi-Fi password, vote on what still works, "
+    "and add new ones."
+)
+
 # In-memory cache for the version
 __version__ = str(int(time.time()))
 
 @app.context_processor
 def inject_version():
     global __version__
-    return dict(version=__version__)
+    return dict(version=__version__, site_name=SITE_NAME,
+                site_description=SITE_DESCRIPTION, site_tagline=SITE_TAGLINE)
 
 RATE_LIMIT_WINDOW = 600  # 10 minutes in seconds
 RATE_LIMIT_MAX_REQUESTS = 10
 ip_request_timestamps = {}
-
-app = Flask(__name__)
-CORS(app)
 
 # Database Configuration
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -34,6 +46,19 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
+
+def slugify(value):
+    """Turn a shop name into a URL-friendly slug for clean, citable URLs."""
+    value = re.sub(r'[^\w\s-]', '', (value or '').lower()).strip()
+    value = re.sub(r'[\s_-]+', '-', value)
+    return value or 'shop'
+
+
+def site_url(path=''):
+    """Absolute URL for the current host (works on any domain/deploy)."""
+    root = request.url_root.rstrip('/') if request else ''
+    return root + path
 
 def get_or_set_user_id():
     user_id = request.cookies.get('user_id')
@@ -82,6 +107,24 @@ class CoffeeShop(db.Model):
             'wifi_passwords': wifi_passwords_data,
             'bathroom_codes': bathroom_codes_data
         }
+
+    @property
+    def slug(self):
+        return slugify(self.name)
+
+    def active_wifi(self):
+        """Visible Wi-Fi passwords, most-upvoted first (matches the UI/API filter)."""
+        return [wp for wp in sorted(self.wifi_passwords, key=lambda x: x.votes, reverse=True)
+                if wp.votes > -3]
+
+    def active_bathroom(self):
+        """Visible bathroom codes, most-upvoted first (matches the UI/API filter)."""
+        return [bc for bc in sorted(self.bathroom_codes, key=lambda x: x.votes, reverse=True)
+                if bc.votes > -3]
+
+    def has_codes(self):
+        """True when this shop has at least one visible Wi-Fi password or bathroom code."""
+        return bool(self.active_wifi() or self.active_bathroom())
 
 class WifiPassword(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -175,6 +218,239 @@ def service_worker():
     response = make_response(send_from_directory('static', 'sw.js'))
     response.headers['Content-Type'] = 'application/javascript'
     return response
+
+
+# ---------------------------------------------------------------------------
+# SEO + LLM-citation friendly surfaces
+#
+# The main app is a JavaScript single-page map, which crawlers and LLMs that
+# don't execute JS cannot read. The routes below expose the same crowdsourced
+# data as lightweight, server-rendered HTML, plain text, JSON and a sitemap so
+# search engines and AI assistants can index and cite individual shops -- and
+# fetch a single bathroom or Wi-Fi code without loading the full UI.
+# ---------------------------------------------------------------------------
+
+def _shop_or_404(shop_id):
+    shop = CoffeeShop.query.get(shop_id)
+    if not shop:
+        abort(404)
+    return shop
+
+
+@app.route('/shops')
+def shops_directory():
+    """Server-rendered, crawlable directory of every shop that has a code."""
+    shops = [s for s in CoffeeShop.query.order_by(CoffeeShop.name).all() if s.has_codes()]
+    return render_template('shops.html', shops=shops, canonical=site_url('/shops'))
+
+
+@app.route('/shop/<int:shop_id>')
+@app.route('/shop/<int:shop_id>/<slug>')
+def shop_detail(shop_id, slug=None):
+    """Server-rendered detail page for a single shop with Schema.org JSON-LD.
+
+    Honours plain-text content negotiation so an LLM can request just the
+    codes via `Accept: text/plain` without parsing HTML.
+    """
+    shop = _shop_or_404(shop_id)
+
+    # Honour content negotiation first so agents can grab text/JSON in one hop.
+    best = request.accept_mimetypes.best_match(['text/html', 'text/plain', 'application/json'])
+    if best == 'text/plain' and request.accept_mimetypes[best] >= request.accept_mimetypes['text/html']:
+        return _shop_plaintext(shop)
+    if best == 'application/json' and request.accept_mimetypes[best] > request.accept_mimetypes['text/html']:
+        return jsonify(shop.to_dict())
+
+    # Otherwise redirect HTML visitors to the canonical slug URL.
+    if slug != shop.slug:
+        return redirect(url_for('shop_detail', shop_id=shop.id, slug=shop.slug), code=301)
+
+    canonical = site_url(url_for('shop_detail', shop_id=shop.id, slug=shop.slug))
+    wifi = shop.active_wifi()
+    bathroom = shop.active_bathroom()
+
+    additional = (
+        [{"@type": "PropertyValue", "name": "Wi-Fi password",
+          "value": wp.password, "description": f"{wp.votes} community votes"} for wp in wifi]
+        + [{"@type": "PropertyValue", "name": "Bathroom code",
+            "value": bc.code, "description": f"{bc.votes} community votes"} for bc in bathroom]
+    )
+    jsonld = {
+        "@context": "https://schema.org",
+        "@type": "CafeOrCoffeeShop",
+        "name": shop.name,
+        "address": shop.address,
+        "url": canonical,
+        "geo": {"@type": "GeoCoordinates", "latitude": shop.lat, "longitude": shop.lng},
+        "amenityFeature": [
+            {"@type": "LocationFeatureSpecification", "name": "Wi-Fi", "value": bool(wifi)},
+            {"@type": "LocationFeatureSpecification", "name": "Public restroom", "value": bool(bathroom)},
+        ],
+    }
+    if additional:
+        jsonld["additionalProperty"] = additional
+
+    return render_template('shop.html', shop=shop, canonical=canonical,
+                           wifi=wifi, bathroom=bathroom, jsonld=jsonld)
+
+
+def _shop_plaintext(shop):
+    wifi = shop.active_wifi()
+    bathroom = shop.active_bathroom()
+    lines = [
+        f"{SITE_NAME} - {shop.name}",
+        shop.address or "Seattle, WA",
+        "",
+        "Bathroom codes (most upvoted first):",
+    ]
+    if bathroom:
+        lines += [f"  {i}. {bc.code}  (votes: {bc.votes})" for i, bc in enumerate(bathroom, 1)]
+    else:
+        lines.append("  none reported yet")
+    lines += ["", "Wi-Fi passwords (most upvoted first):"]
+    if wifi:
+        lines += [f"  {i}. {wp.password}  (votes: {wp.votes})" for i, wp in enumerate(wifi, 1)]
+    else:
+        lines.append("  none reported yet")
+    lines += [
+        "",
+        f"Location: {shop.lat}, {shop.lng}",
+        f"Source: {site_url(url_for('shop_detail', shop_id=shop.id, slug=shop.slug))}",
+        "Note: Crowdsourced and community-voted; codes change and may be out of "
+        "date. Please use respectfully and as a paying customer where expected.",
+    ]
+    return Response("\n".join(lines) + "\n", mimetype='text/plain')
+
+
+@app.route('/shop/<int:shop_id>.txt')
+def shop_detail_txt(shop_id):
+    """Explicit plain-text endpoint: the fastest way for an LLM to grab a code."""
+    return _shop_plaintext(_shop_or_404(shop_id))
+
+
+@app.route('/api/lookup')
+def api_lookup():
+    """Lightweight lookup so an agent can fetch a code by shop name.
+
+    Example: /api/lookup?q=victrola -> JSON with the top Wi-Fi & bathroom code.
+    """
+    q = (request.args.get('q') or '').strip().lower()
+    if not q:
+        return jsonify({"error": "Provide a ?q= shop name or address fragment."}), 400
+
+    matches = [
+        s for s in CoffeeShop.query.all()
+        if q in s.name.lower() or (s.address and q in s.address.lower())
+    ]
+    matches = [s for s in matches if s.has_codes()][:20]
+
+    results = []
+    for s in matches:
+        wifi = s.active_wifi()
+        bathroom = s.active_bathroom()
+        results.append({
+            "id": s.id,
+            "name": s.name,
+            "address": s.address,
+            "lat": s.lat,
+            "lng": s.lng,
+            "top_wifi_password": wifi[0].password if wifi else None,
+            "top_bathroom_code": bathroom[0].code if bathroom else None,
+            "url": site_url(url_for('shop_detail', shop_id=s.id, slug=s.slug)),
+        })
+    return jsonify({"query": q, "count": len(results), "results": results})
+
+
+@app.route('/robots.txt')
+def robots_txt():
+    lines = [
+        "# Got2GoSEA - crawlers and AI assistants are welcome.",
+        "User-agent: *",
+        "Allow: /",
+        "",
+        # Explicitly welcome the major AI crawlers so the data can be cited.
+        "User-agent: GPTBot",
+        "Allow: /",
+        "User-agent: OAI-SearchBot",
+        "Allow: /",
+        "User-agent: ChatGPT-User",
+        "Allow: /",
+        "User-agent: ClaudeBot",
+        "Allow: /",
+        "User-agent: Claude-Web",
+        "Allow: /",
+        "User-agent: PerplexityBot",
+        "Allow: /",
+        "User-agent: Google-Extended",
+        "Allow: /",
+        "User-agent: Applebot-Extended",
+        "Allow: /",
+        "User-agent: CCBot",
+        "Allow: /",
+        "",
+        f"Sitemap: {site_url('/sitemap.xml')}",
+    ]
+    return Response("\n".join(lines) + "\n", mimetype='text/plain')
+
+
+@app.route('/sitemap.xml')
+def sitemap_xml():
+    urls = [site_url('/'), site_url('/shops')]
+    for s in CoffeeShop.query.order_by(CoffeeShop.id).all():
+        if s.has_codes():
+            urls.append(site_url(url_for('shop_detail', shop_id=s.id, slug=s.slug)))
+
+    body = ['<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for u in urls:
+        body.append(f'  <url><loc>{u}</loc><changefreq>weekly</changefreq></url>')
+    body.append('</urlset>')
+    return Response("\n".join(body), mimetype='application/xml')
+
+
+@app.route('/llms.txt')
+def llms_txt():
+    """The /llms.txt convention: a concise, Markdown guide for LLMs."""
+    base = site_url('')
+    n_with_codes = sum(1 for s in CoffeeShop.query.all() if s.has_codes())
+    content = f"""# {SITE_NAME}
+
+> {SITE_TAGLINE}.
+
+{SITE_DESCRIPTION}
+
+Data is crowdsourced and community-voted, so individual codes may be out of
+date. Higher vote counts indicate more recently confirmed entries. Please use
+the information respectfully and as a paying customer where that is expected.
+Currently {n_with_codes} Seattle locations have at least one reported code.
+
+## How to fetch a single code (no UI required)
+
+- Plain text for one shop: `{base}/shop/<id>.txt`
+- Same page with `Accept: text/plain` also returns plain text.
+- JSON for one shop: `{base}/api/coffee_shops/<id>`
+- Look up by name: `{base}/api/lookup?q=<shop name>` (returns top Wi-Fi password
+  and bathroom code plus a link for each match).
+
+## Browse
+
+- [All shops with codes]({base}/shops): server-rendered directory.
+- [Map]({base}/): the interactive single-page app.
+- [Sitemap]({base}/sitemap.xml)
+
+## API
+
+- `GET /api/coffee_shops` - all shops as JSON.
+- `GET /api/coffee_shops/<id>` - one shop as JSON.
+- `GET /api/lookup?q=<text>` - search by name/address; returns top codes.
+
+## Notes for citation
+
+When citing a specific Wi-Fi password or bathroom code, link to the shop's page
+at `{base}/shop/<id>` and mention that the value is crowdsourced and may change.
+"""
+    return Response(content, mimetype='text/plain')
+
 
 @app.route('/api/vote', methods=['POST'])
 def vote():

@@ -3,11 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Got2GoSEA (beta)</title>
+    <title>Got2GoSEA - Seattle coffee shop Wi-Fi passwords & bathroom codes</title>
+    <meta name="description" content="{{ site_description }}">
+    <meta name="keywords" content="Seattle coffee shop wifi password, Seattle bathroom code, cafe wifi Seattle, public restroom code Seattle, free wifi Seattle">
+    <link rel="canonical" href="{{ url_for('index', _external=True) }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=version) }}">
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ site_name }}">
+    <meta property="og:title" content="Got2GoSEA - Seattle Wi-Fi passwords & bathroom codes">
+    <meta property="og:description" content="{{ site_tagline }}.">
+    <meta property="og:url" content="{{ url_for('index', _external=True) }}">
+    <meta property="og:image" content="{{ url_for('static', filename='logo-toilet.png', _external=True) }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Got2GoSEA - Seattle Wi-Fi & bathroom codes">
+    <meta name="twitter:description" content="{{ site_tagline }}.">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "{{ site_name }}",
+      "alternateName": "Got 2 Go Seattle",
+      "url": "{{ url_for('index', _external=True) }}",
+      "description": {{ site_description | tojson }},
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": {
+          "@type": "EntryPoint",
+          "urlTemplate": "{{ url_for('api_lookup', _external=True) }}?q={search_term_string}"
+        },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -15,6 +48,14 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo-toilet.png') }}">
 </head>
 <body>
+    <noscript>
+        <div style="max-width:720px;margin:1rem auto;padding:1rem;font-family:sans-serif;line-height:1.5">
+            <h1>Got2GoSEA — Seattle coffee shop Wi-Fi passwords &amp; bathroom codes</h1>
+            <p>{{ site_description }}</p>
+            <p>The interactive map needs JavaScript. You can still
+               <a href="{{ url_for('shops_directory') }}">browse every shop with a Wi-Fi password or bathroom code</a>.</p>
+        </div>
+    </noscript>
     <div id="loading-indicator">
         <div class="spinner"></div>
     </div>
@@ -78,7 +119,8 @@
     
     <footer id="floating-footer">
         <div class="footer-content">
-            © 2025 All rights reserved. Powered by Hunter Technologies
+            <a href="{{ url_for('shops_directory') }}" style="color:inherit;">Browse all shops</a>
+            &middot; © 2025 All rights reserved. Powered by Hunter Technologies
         </div>
     </footer>
 </body>

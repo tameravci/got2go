@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Seattle coffee shops with Wi-Fi & bathroom codes | {{ site_name }}</title>
+    <meta name="description" content="Directory of {{ shops|length }} Seattle coffee shops, cafes and bakeries with crowdsourced Wi-Fi passwords and bathroom codes on {{ site_name }}. Find guest Wi-Fi and restroom codes near you.">
+    <link rel="canonical" href="{{ canonical }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
+
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ site_name }}">
+    <meta property="og:title" content="Seattle coffee shops with Wi-Fi & bathroom codes">
+    <meta property="og:description" content="Directory of Seattle coffee shops with crowdsourced Wi-Fi passwords and bathroom codes.">
+    <meta property="og:url" content="{{ canonical }}">
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": "Seattle coffee shops with Wi-Fi & bathroom codes",
+      "description": {{ site_description | tojson }},
+      "url": {{ canonical | tojson }},
+      "mainEntity": {
+        "@type": "ItemList",
+        "numberOfItems": {{ shops|length }},
+        "itemListElement": [
+          {% for shop in shops %}
+          {"@type": "ListItem", "position": {{ loop.index }}, "name": {{ shop.name | tojson }}, "url": "{{ url_for('shop_detail', shop_id=shop.id, slug=shop.slug, _external=True) }}"}{{ "," if not loop.last }}
+          {% endfor %}
+        ]
+      }
+    }
+    </script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+               max-width: 760px; margin: 0 auto; padding: 1rem 1.25rem 4rem; line-height: 1.5; color-scheme: light dark; }
+        h1 { margin-bottom: .25rem; }
+        .intro { color: #666; }
+        .intro a { color: #0a66c2; }
+        ul.shops { list-style: none; padding: 0; }
+        ul.shops li { padding: .6rem .25rem; border-bottom: 1px solid #eee; }
+        ul.shops a { color: #0a66c2; text-decoration: none; font-weight: 600; }
+        ul.shops .addr { display: block; color: #888; font-size: .85rem; font-weight: 400; }
+        .tags { font-size: .75rem; color: #0a7d2c; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Seattle coffee shops with Wi-Fi &amp; bathroom codes</h1>
+        <p class="intro">{{ shops|length }} locations have at least one crowdsourced code.
+           Prefer a map? Use the <a href="{{ url_for('index') }}">interactive map</a>.</p>
+
+        <ul class="shops">
+            {% for shop in shops %}
+            <li>
+                <a href="{{ url_for('shop_detail', shop_id=shop.id, slug=shop.slug) }}">{{ shop.name }}</a>
+                <span class="tags">
+                    {%- if shop.active_bathroom() %} 🚻 bathroom code{% endif -%}
+                    {%- if shop.active_wifi() %} 📶 Wi-Fi{% endif -%}
+                </span>
+                <span class="addr">{{ shop.address }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </main>
+</body>
+</html>
