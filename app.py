@@ -212,6 +212,9 @@ def index():
 def service_worker():
     response = make_response(send_from_directory('static', 'sw.js'))
     response.headers['Content-Type'] = 'application/javascript'
+    # Never let the SW script itself be HTTP-cached, so browsers always see a
+    # new sw.js on deploy and can update the worker (and self-heal stale users).
+    response.headers['Cache-Control'] = 'no-cache'
     return response
 
 

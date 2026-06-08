@@ -281,7 +281,23 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('clear-search').style.display = 'none';
 
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW failed:', err));
+        // updateViaCache: 'none' forces the browser to bypass the HTTP cache
+        // when checking /sw.js, so worker updates are picked up promptly.
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+            .catch(err => console.error('SW failed:', err));
+
+        // If the page was already controlled by an older worker, reload once
+        // when a new worker takes over so the user lands on fresh assets
+        // without needing a hard refresh. Guarded against reload loops, and
+        // skipped on first-ever install (no existing controller).
+        if (navigator.serviceWorker.controller) {
+            let reloading = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (reloading) return;
+                reloading = true;
+                window.location.reload();
+            });
+        }
     }
 
     let deferredPrompt;
