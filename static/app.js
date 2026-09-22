@@ -257,9 +257,12 @@ document.addEventListener('DOMContentLoaded', function () {
         maxClusterRadius: 50
     }).addTo(map);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        maxZoom: 19
+    // CARTO basemaps now watermark every keyless tile, so use OSM directly.
+    // The 'basemap-muted' class (style.css) fades OSM colors to a light palette.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+        className: 'basemap-muted'
     }).addTo(map);
 
     fetch(`${API_BASE_URL}/api/coffee_shops`)

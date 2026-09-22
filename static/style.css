@@ -267,6 +267,11 @@ body {
     position: relative;
 }
 
+/* Fade OSM tiles to a light, low-contrast palette so pins stand out. */
+.basemap-muted {
+    filter: grayscale(0.85) brightness(1.06) contrast(0.9);
+}
+
 /* Find Me button */
 #find-me-button {
     position: absolute;
