@@ -146,6 +146,15 @@
     <script src="{{ url_for('static', filename='hours.js', v=version) }}"></script>
     <script src="{{ url_for('static', filename='app.js', v=version) }}"></script>
     <div id="toast"></div>
+    <div id="tip-card" role="dialog" aria-live="polite" aria-labelledby="tip-card-title" hidden>
+        <button id="tip-card-later" class="tip-close" aria-label="Close">&times;</button>
+        <p id="tip-card-title" class="tip-title">☕ Glad that helped!</p>
+        <p class="tip-text">Got2GoSEA is free and has no ads. Coffees pay for the server and keep the codes coming.</p>
+        <div class="tip-actions">
+            <a id="tip-card-give" class="lets-go-button" href="https://buymeacoffee.com/tamerica" target="_blank" rel="noopener">Buy me a coffee</a>
+            <button id="tip-card-never" class="link-btn">Don't ask again</button>
+        </div>
+    </div>
     <div id="speed-card" role="dialog" aria-live="polite" hidden>
         <p class="speed-card-text"></p>
         <div class="speed-card-actions">

@@ -291,6 +291,7 @@ document.addEventListener('click', function (event) {
             copyToClipboard(el.dataset.value);
             rememberCopy(shopId, itemType, itemId);
             if (itemType === 'wifi_passwords') armSpeedPrompt(shopId);
+            maybeAskForTip();
             break;
         case 'vote':
             forgetCopy(shopId, itemType, itemId);
@@ -662,6 +663,10 @@ document.addEventListener('DOMContentLoaded', function () {
         runSpeedTest(Number(document.getElementById('speed-card').dataset.shop)));
     document.getElementById('speed-card-dismiss').addEventListener('click', hideSpeedCard);
 
+    document.getElementById('tip-card-give').addEventListener('click', () => closeTipCard({ gaveAt: Date.now() }));
+    document.getElementById('tip-card-later').addEventListener('click', () => closeTipCard());
+    document.getElementById('tip-card-never').addEventListener('click', () => closeTipCard({ never: true }));
+
     map.on('locationfound', function(e) {
         userLatLng = e.latlng;
         if (userLocationLayer) {
@@ -735,6 +740,7 @@ function showSpeedCard(shop) {
     card.querySelector('.speed-card-text').innerHTML =
         `${network} Test its speed. It takes about 5 seconds.`;
     card.dataset.shop = shop.id;
+    document.getElementById('tip-card').hidden = true;  // one card at a time
     card.hidden = false;
 }
 
@@ -881,6 +887,9 @@ function handleVote(shopId, itemType, voteType, itemId) {
         if (updatedShop) {
             rememberShops([updatedShop]);
             refreshMarker(shopId);
+            // A 👍 that sticks (not an undo) means the code helped.
+            const item = (updatedShop[itemType] || []).find(i => i.id === itemId);
+            if (voteType === 'upvote' && item && item.user_vote === 'upvote') maybeAskForTip();
         }
     });
 }
@@ -910,8 +919,44 @@ function suggest(shopId, itemType, inputId, noCode = false) {
             document.getElementById(inputId).value = '';
             if (ssidInput) ssidInput.value = '';
             showToast('Added. Thanks!');
+            maybeAskForTip();
         }
     });
+}
+
+// ---- Tip prompt ------------------------------------------------------------
+// Ask for a coffee right after the app helped: a copied code, a 👍, or an
+// added code. Rare on purpose: at most once a week, never again after
+// "Don't ask again", and a long pause after someone already gave.
+const TIP_KEY = 'got2go.tip';
+const TIP_URL = 'https://buymeacoffee.com/tamerica';
+const TIP_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
+const TIP_AFTER_GIVING_MS = 90 * 24 * 60 * 60 * 1000;
+const TIP_DELAY_MS = 1200;   // let the "Copied!" toast show first
+let tipTimer = null;
+
+function tipAllowed() {
+    const t = readJson(TIP_KEY);
+    const now = Date.now();
+    if (t.never) return false;
+    if (t.gaveAt && now - t.gaveAt < TIP_AFTER_GIVING_MS) return false;
+    if (t.shownAt && now - t.shownAt < TIP_EVERY_MS) return false;
+    return true;
+}
+
+function maybeAskForTip() {
+    if (!tipAllowed() || tipTimer) return;
+    tipTimer = setTimeout(() => {
+        tipTimer = null;
+        if (!document.getElementById('speed-card').hidden) return;  // one card at a time
+        writeJson(TIP_KEY, { ...readJson(TIP_KEY), shownAt: Date.now() });
+        document.getElementById('tip-card').hidden = false;
+    }, TIP_DELAY_MS);
+}
+
+function closeTipCard(update) {
+    if (update) writeJson(TIP_KEY, { ...readJson(TIP_KEY), ...update });
+    document.getElementById('tip-card').hidden = true;
 }
 
 function saveSsid(shopId, itemId) {

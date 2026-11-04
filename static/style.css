@@ -989,3 +989,42 @@ input.ssid-new { display: block; width: 100%; box-sizing: border-box; margin: 8p
 .more-codes { margin-top: 8px; }
 .more-codes[hidden] { display: none; }
 .shop-popup .more-link { margin-top: 6px; color: var(--text-muted); }
+
+/* Tip card: shows after a copy, a 👍 or an added code. Same spot as the
+   speed card; only one of them shows at a time. */
+#tip-card {
+    position: fixed;
+    left: 50%;
+    bottom: 72px;
+    transform: translateX(-50%);
+    width: min(380px, calc(100% - 32px));
+    box-sizing: border-box;
+    z-index: 10000;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: 14px 16px 12px;
+    animation: tip-in 0.25s ease-out;
+}
+#tip-card[hidden] { display: none; }
+@keyframes tip-in {
+    from { opacity: 0; transform: translate(-50%, 12px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.tip-title { margin: 0 24px 4px 0; font-weight: 700; font-size: 0.98rem; }
+.tip-text { margin: 0 0 12px; font-size: 0.88rem; color: var(--text-muted); line-height: 1.4; }
+.tip-actions { display: flex; align-items: center; gap: 14px; }
+.tip-actions .lets-go-button { text-decoration: none; display: inline-block; }
+.tip-actions .link-btn { color: var(--text-muted); font-size: 0.8rem; }
+.tip-close {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    border: 0;
+    background: none;
+    font-size: 1.3rem;
+    line-height: 1;
+    color: var(--text-muted);
+    cursor: pointer;
+}
