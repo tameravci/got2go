@@ -33,4 +33,17 @@ const cases = [
 for (const [text, date, want] of cases) {
     assert.strictEqual(isOpenAt(text, date), want, `${JSON.stringify(text)} at ${date}`);
 }
-console.log(`hours.js: ${cases.length} cases passed`);
+const { describeAt } = require('../static/hours.js');
+const described = [
+    ['Mo-Fr 07:00-16:00; Sa-Su 08:00-16:00', wed(10), 'Open until 4 PM'],
+    ['Mo-Fr 07:00-16:00; Sa-Su 08:00-16:00', wed(17), 'Closed · opens 7 AM tomorrow'],
+    ['Mo-Fr 07:00-16:00; Sa-Su 08:00-16:00', wed(5), 'Closed · opens 7 AM'],
+    ['Mo-Fr 07:00-16:30', sat(10), 'Closed · opens 7 AM Mon'],
+    ['Fr-Sa 18:00-02:00', sun(1), 'Open until 2 AM'],
+    ['Mo-Su 06:00-00:00', wed(23), 'Open until midnight'],
+    ['24/7', wed(3), 'Open 24 hours'],
+];
+for (const [text, date, want] of described) {
+    assert.strictEqual(describeAt(text, date).text, want, `${text} at ${date}`);
+}
+console.log(`hours.js: ${cases.length + described.length} cases passed`);

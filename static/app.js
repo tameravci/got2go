@@ -80,14 +80,13 @@ function featureLabels(tags) {
     tags = tags || {};
     const out = [];
     const wheelchair = tags.wheelchair || tags['toilets:wheelchair'];
-    if (wheelchair === 'yes') out.push('♿ Accessible');
-    else if (wheelchair === 'limited') out.push('♿ Limited access');
-    if (tags.changing_table === 'yes') out.push('🚼 Changing table');
+    if (wheelchair === 'yes') out.push('♿');
+    else if (wheelchair === 'limited') out.push('♿ limited');
+    if (tags.changing_table === 'yes') out.push('🚼');
     if (tags.unisex === 'yes' || tags.gender_segregated === 'no') out.push('All-gender');
     if (tags.fee === 'yes') out.push('Fee');
     else if (tags.fee === 'no') out.push('Free');
     if (tags.access === 'customers' || tags['toilets:access'] === 'customers') out.push('Customers only');
-    if (tags.opening_hours) out.push(`🕒 ${tags.opening_hours}`);
     return out;
 }
 
@@ -133,80 +132,112 @@ function pendingQuestion(shop) {
     return null;
 }
 
+// "WA" or "Seattle WA" tells the visitor nothing, so hide those.
+function usefulAddress(address) {
+    const a = (address || '').trim();
+    if (!a || /^(seattle,?\s*)?wa$/i.test(a) || a === 'Address not available') return '';
+    return a;
+}
+
 function codeRow(shop, itemType, item) {
-    const value = itemType === 'wifi_passwords' ? item.password : item.code;
+    const isWifi = itemType === 'wifi_passwords';
+    const value = isWifi ? item.password : item.code;
     const ids = `data-shop="${shop.id}" data-type="${itemType}" data-item="${item.id}"`;
     const up = item.user_vote === 'upvote' ? 'voted-up' : '';
     const down = item.user_vote === 'downvote' ? 'voted-down' : '';
-    const fresh = item.last_confirmed_at
-        ? `<span class="code-fresh">worked ${timeAgo(item.last_confirmed_at)}</span>` : '';
-    let network = '';
-    if (itemType === 'wifi_passwords') {
-        network = item.ssid
-            ? `<div class="ssid-line">📶 Network <b>${escapeHtml(item.ssid)}</b></div>`
-            : `<button class="link-btn ssid-add" data-action="show-ssid" data-item="${item.id}">+ Add network name</button>
-               <div class="ssid-form" id="ssid-form-${item.id}" hidden>
-                   <input type="text" id="ssid-input-${item.id}" maxlength="32" placeholder="Network name (SSID)">
-                   <button class="suggest-btn" data-action="save-ssid" ${ids}>Save</button>
-               </div>`;
+
+    // Tap the code to copy it. "No code" entries have nothing to copy.
+    const main = item.no_code
+        ? `<span class="code-chip code-none">🔓 ${isWifi ? 'Open network' : 'No code needed'}</span>`
+        : `<button class="code-chip" data-action="copy" data-value="${escapeHtml(value)}" ${ids} title="Tap to copy">
+               <span class="code-value">${escapeHtml(value)}</span><span class="copy-icon" aria-hidden="true">⧉</span>
+           </button>`;
+
+    const meta = [];
+    if (isWifi) {
+        meta.push(item.ssid
+            ? `📶 ${escapeHtml(item.ssid)}`
+            : `<button class="meta-link" data-action="show-ssid" data-item="${item.id}">+ network name</button>`);
     }
-    return network + `
-        <div class="popup-row">
-            ${item.no_code
-                ? `<span class="no-code">${itemType === 'wifi_passwords' ? '🔓 Open network, no password' : '🔓 No code needed'}</span>`
-                : `<code class="${itemType === 'wifi_passwords' ? 'popup-password' : 'popup-code'}">${escapeHtml(value)}</code>
-            <button class="copy-button" aria-label="Copy" data-action="copy" data-value="${escapeHtml(value)}" ${ids}>📋</button>`}
-            <span class="vote-count" title="votes">${item.votes}</span>
-            <button class="vote-btn ${up}" aria-label="It worked" title="It worked" data-action="vote" data-vote="upvote" ${ids}>👍</button>
-            <button class="vote-btn ${down}" aria-label="It didn't work" title="It didn't work" data-action="vote" data-vote="downvote" ${ids}>👎</button>
-            ${fresh}
+    if (item.last_confirmed_at) meta.push(`worked ${timeAgo(item.last_confirmed_at)}`);
+
+    const ssidForm = isWifi && !item.ssid ? `
+        <div class="inline-form" id="ssid-form-${item.id}" hidden>
+            <input type="text" id="ssid-input-${item.id}" maxlength="32" placeholder="Network name">
+            <button class="btn-small" data-action="save-ssid" ${ids}>Save</button>
+        </div>` : '';
+
+    return `
+        <div class="code-item">
+            <div class="code-line">
+                ${main}
+                <div class="votes">
+                    <button class="vote-btn ${up}" aria-label="It worked, ${item.votes} votes" title="It worked" data-action="vote" data-vote="upvote" ${ids}>👍<span>${item.votes}</span></button>
+                    <button class="vote-btn ${down}" aria-label="It didn't work" title="It didn't work" data-action="vote" data-vote="downvote" ${ids}>👎</button>
+                </div>
+            </div>
+            ${meta.length ? `<div class="code-meta">${meta.join(' · ')}</div>` : ''}
+            ${ssidForm}
         </div>`;
 }
 
 function codeSection(shop, itemType, title) {
+    const isWifi = itemType === 'wifi_passwords';
     const items = (shop[itemType] || []).filter(i => i.votes > -3);
-    let html = `<hr><h5>${title}</h5>`;
-    if (itemType === 'wifi_passwords' && shop.wifi_speed) {
-        const sp = shop.wifi_speed;
-        html += `<div class="speed-badge">⚡ ${sp.mbps} Mbps <small>(${sp.tests} test${sp.tests > 1 ? 's' : ''})</small></div>`;
-    }
-    html += items.length
-        ? items.map(i => codeRow(shop, itemType, i)).join('')
-        : `<p class="popup-none">None yet.</p>`;
-
+    const formId = `add-${itemType}-${shop.id}`;
     const inputId = `${itemType}-suggestion-${shop.id}`;
-    const attrs = itemType === 'bathroom_codes'
-        ? `placeholder="New code (digits, *, #)" inputmode="tel" maxlength="12" data-filter="code"`
-        : `placeholder="New password" maxlength="16"`;
-    if (itemType === 'wifi_passwords') {
-        html += `<input type="text" class="ssid-new" id="${inputId}-ssid" maxlength="32" placeholder="Network name (optional)">`;
+
+    let head = `<div class="section-head"><h5>${title}</h5>`;
+    if (isWifi && shop.wifi_speed) {
+        const sp = shop.wifi_speed;
+        head += `<span class="speed-badge" title="Median of ${sp.tests} test${sp.tests > 1 ? 's' : ''}">⚡ ${sp.mbps} Mbps</span>`;
     }
-    html += `
-        <div class="suggestion-form">
-            <input type="text" id="${inputId}" ${attrs}>
-            <button class="suggest-btn" data-action="suggest" data-shop="${shop.id}" data-type="${itemType}" data-input="${inputId}">Add</button>
+    head += `<button class="meta-link add-link" data-action="toggle-add" data-form="${formId}">+ Add</button></div>`;
+
+    // Show the top codes. Older, lower-voted ones fold behind a link.
+    const VISIBLE = 3;
+    let body = items.slice(0, VISIBLE).map(i => codeRow(shop, itemType, i)).join('');
+    if (items.length > VISIBLE) {
+        const moreId = `more-${itemType}-${shop.id}`;
+        body += `<div class="more-codes" id="${moreId}" hidden>${items.slice(VISIBLE).map(i => codeRow(shop, itemType, i)).join('')}</div>
+                 <button class="meta-link more-link" data-action="show-more" data-target="${moreId}">Show ${items.length - VISIBLE} more</button>`;
+    }
+    if (!items.length) body = `<p class="popup-none">Nothing yet.</p>`;
+
+    // The add form stays hidden until the visitor taps "+ Add".
+    const attrs = isWifi
+        ? `placeholder="Password" maxlength="16"`
+        : `placeholder="Code (digits, *, #)" inputmode="tel" maxlength="12" data-filter="code"`;
+    const noneLabel = isWifi ? '🔓 It\'s an open network' : '🔓 No code needed';
+    const form = `
+        <div class="add-form" id="${formId}" hidden>
+            ${isWifi ? `<input type="text" class="ssid-new" id="${inputId}-ssid" maxlength="32" placeholder="Network name (optional)">` : ''}
+            <div class="inline-form">
+                <input type="text" id="${inputId}" ${attrs}>
+                <button class="btn-small btn-primary" data-action="suggest" data-shop="${shop.id}" data-type="${itemType}" data-input="${inputId}">Add</button>
+            </div>
+            ${items.some(i => i.no_code) ? '' :
+              `<button class="meta-link" data-action="suggest-none" data-shop="${shop.id}" data-type="${itemType}" data-input="${inputId}">${noneLabel}</button>`}
         </div>`;
-    // Some places need no code, or run an open network. Hide the button
-    // once that answer is already listed.
-    if (!items.some(i => i.no_code)) {
-        const label = itemType === 'wifi_passwords' ? 'No password (open network)' : 'No code needed';
-        html += `<button class="link-btn" data-action="suggest-none" data-shop="${shop.id}" data-type="${itemType}" data-input="${inputId}">🔓 ${label}</button>`;
-    }
-    if (itemType === 'wifi_passwords') {
-        html += `<button class="link-btn" data-action="speedtest" data-shop="${shop.id}">⚡ Test this Wi-Fi's speed</button>`;
-    }
-    return html;
+
+    return `<section class="popup-section">${head}${body}${form}</section>`;
 }
 
 function createPopupContent(shop) {
     const isRestroom = shop.category === 'restroom';
-    let content = `<div class="popup-header"><b>${escapeHtml(shop.name)}</b><br><small>${escapeHtml(shop.address || '')}</small></div>`;
+    const address = usefulAddress(shop.address);
+    let content = `<div class="popup-header"><b>${escapeHtml(shop.name)}</b>${address ? `<small>${escapeHtml(address)}</small>` : ''}</div>`;
 
-    const labels = featureLabels(shop.tags);
-    const open = openNow(shop);
-    if (open !== null) labels.unshift(open ? '🟢 Open now' : '⚪ Closed now');
-    if (labels.length) {
-        content += `<div class="popup-chips">${labels.map(l => `<span>${escapeHtml(l)}</span>`).join('')}</div>`;
+    // One status line: "Open until 4 PM · ♿ · Free". Full hours on hover
+    // and on the details page.
+    const tags = shop.tags || {};
+    const status = window.OpeningHours ? OpeningHours.describeNow(tags.opening_hours) : null;
+    const parts = [];
+    if (status) parts.push(`<span class="status ${status.open ? 'is-open' : 'is-closed'}">${escapeHtml(status.text)}</span>`);
+    featureLabels(tags).forEach(l => parts.push(escapeHtml(l)));
+    if (parts.length) {
+        const hoursTitle = tags.opening_hours ? ` title="${escapeHtml(tags.opening_hours)}"` : '';
+        content += `<div class="popup-status"${hoursTitle}>${parts.join(' · ')}</div>`;
     }
 
     const question = pendingQuestion(shop);
@@ -215,21 +246,37 @@ function createPopupContent(shop) {
         const ids = `data-shop="${shop.id}" data-type="${question.itemType}" data-item="${question.item.id}"`;
         content += `
             <div class="did-it-work">
-                Did <code>${escapeHtml(value)}</code> work last time?
-                <div>
-                    <button data-action="answer" data-vote="upvote" ${ids}>✓ Yes</button>
-                    <button data-action="answer" data-vote="downvote" ${ids}>✗ No</button>
-                    <button data-action="answer" data-vote="" ${ids}>Not sure</button>
-                </div>
+                <span>Did <code>${escapeHtml(value)}</code> work?</span>
+                <button data-action="answer" data-vote="upvote" ${ids} aria-label="Yes">👍</button>
+                <button data-action="answer" data-vote="downvote" ${ids} aria-label="No">👎</button>
+                <button class="meta-link" data-action="answer" data-vote="" ${ids}>skip</button>
             </div>`;
-    } else if (!isRestroom && !hasCodes(shop)) {
-        content += `<div class="popup-empty-callout">No codes here yet. Be the first to add one!</div>`;
     }
 
-    content += codeSection(shop, 'bathroom_codes', isRestroom ? 'Door codes' : 'Bathroom codes');
-    if (!isRestroom) content += codeSection(shop, 'wifi_passwords', 'Wi-Fi passwords');
-    if (shop.url) content += `<a class="popup-page-link" href="${shop.url}">Details &amp; share</a>`;
+    content += codeSection(shop, 'bathroom_codes', isRestroom ? 'Door code' : 'Bathroom');
+    if (!isRestroom) content += codeSection(shop, 'wifi_passwords', 'Wi-Fi');
+
+    content += `<div class="popup-footer">
+        ${isRestroom ? '<span></span>' : `<button class="meta-link" data-action="speedtest" data-shop="${shop.id}">⚡ Test Wi-Fi speed</button>`}
+        ${shop.url ? `<a href="${shop.url}">Details →</a>` : ''}
+    </div>`;
     return content;
+}
+
+// The popup grew (a form opened). Re-measure it so Leaflet pans the map
+// and the whole popup stays on screen.
+// update() would rebuild the content and close the form again, so call
+// Leaflet's layout steps directly.
+function refitOpenPopup() {
+    markerById.forEach(marker => {
+        if (!marker.isPopupOpen()) return;
+        const popup = marker.getPopup();
+        if (popup._updateLayout && popup._updatePosition && popup._adjustPan) {
+            popup._updateLayout();
+            popup._updatePosition();
+            popup._adjustPan();
+        }
+    });
 }
 
 // One click handler for every popup button (data-action="...").
@@ -263,10 +310,24 @@ document.addEventListener('click', function (event) {
         case 'speedtest':
             runSpeedTest(shopId);
             break;
+        case 'toggle-add': {
+            const form = document.getElementById(el.dataset.form);
+            form.hidden = !form.hidden;
+            el.textContent = form.hidden ? '+ Add' : 'Cancel';
+            if (!form.hidden) form.querySelector('input').focus();
+            refitOpenPopup();
+            break;
+        }
+        case 'show-more':
+            document.getElementById(el.dataset.target).hidden = false;
+            el.remove();
+            refitOpenPopup();
+            break;
         case 'show-ssid':
             el.hidden = true;
             document.getElementById(`ssid-form-${itemId}`).hidden = false;
             document.getElementById(`ssid-input-${itemId}`).focus();
+            refitOpenPopup();
             break;
         case 'save-ssid':
             saveSsid(shopId, itemId);
@@ -368,7 +429,8 @@ function createMarker(shop) {
     const marker = L.marker([shop.lat, shop.lng], { icon: shopIcon(shop) });
     marker.shopId = shop.id;
     // Build the popup when it opens, so it always shows the newest data.
-    marker.bindPopup(() => createPopupContent(shopsById.get(shop.id)));
+    marker.bindPopup(() => createPopupContent(shopsById.get(shop.id)),
+                     { minWidth: 250, maxWidth: 290, className: 'shop-popup' });
     return marker;
 }
 

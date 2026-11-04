@@ -108,7 +108,55 @@
         return false;
     }
 
-    const api = { parseSchedule, isOpenAt, isOpenNow: text => isOpenAt(text, new Date()) };
+    // "7 AM", "4:30 PM", "midnight"
+    function formatMinute(minute) {
+        const m = ((minute % 1440) + 1440) % 1440;
+        if (m === 0) return 'midnight';
+        const h = Math.floor(m / 60), mm = m % 60;
+        const h12 = h % 12 === 0 ? 12 : h % 12;
+        return `${h12}${mm ? ':' + String(mm).padStart(2, '0') : ''} ${h < 12 ? 'AM' : 'PM'}`;
+    }
+
+    // Short status for the popup, or null when the hours are unreadable.
+    // {open: true,  text: 'Open until 4 PM'}
+    // {open: false, text: 'Closed · opens 7 AM tomorrow'}
+    function describeAt(text, date) {
+        const schedule = parseSchedule(text);
+        if (!schedule) return null;
+        const day = date.getDay();
+        const minute = date.getHours() * 60 + date.getMinutes();
+
+        let end = null;
+        for (const [s, e] of schedule[day] || []) {
+            if (minute >= s && minute < e) end = Math.max(end || 0, e);
+        }
+        for (const [, e] of schedule[(day + 6) % 7] || []) {
+            if (e > 1440 && minute + 1440 < e) end = Math.max(end || 0, e - 1440);
+        }
+        if (end !== null) {
+            const always = [0, 1, 2, 3, 4, 5, 6].every(d =>
+                (schedule[d] || []).some(([s, e]) => s === 0 && e >= 1440));
+            return { open: true, text: always ? 'Open 24 hours' : `Open until ${formatMinute(end)}` };
+        }
+
+        const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        for (let offset = 0; offset < 7; offset++) {
+            const d = (day + offset) % 7;
+            const starts = (schedule[d] || []).map(([s]) => s)
+                .filter(s => offset > 0 || s > minute).sort((a, b) => a - b);
+            if (starts.length) {
+                const when = offset === 0 ? '' : offset === 1 ? ' tomorrow' : ` ${names[d]}`;
+                return { open: false, text: `Closed · opens ${formatMinute(starts[0])}${when}` };
+            }
+        }
+        return { open: false, text: 'Closed' };
+    }
+
+    const api = {
+        parseSchedule, isOpenAt, describeAt,
+        isOpenNow: text => isOpenAt(text, new Date()),
+        describeNow: text => describeAt(text, new Date()),
+    };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.OpeningHours = api;
 })(this);

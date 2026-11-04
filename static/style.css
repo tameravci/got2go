@@ -872,3 +872,120 @@ input.ssid-new { display: block; width: 100%; box-sizing: border-box; margin: 8p
 .pin-closed svg path { fill: var(--pin-empty) !important; }
 .dot-closed { background: var(--pin-empty); opacity: 0.35; }
 .count-closed { background: var(--surface-2); color: var(--text-muted); font-weight: 500; }
+
+/* ===== Popup layout (v2): fewer boxes, one status line, hidden forms ===== */
+.shop-popup .leaflet-popup-content { margin: 14px 16px 12px; line-height: 1.35; }
+.shop-popup .popup-header b { display: block; font-size: 1.05rem; line-height: 1.25; }
+.shop-popup .popup-header small { display: block; margin-top: 2px; font-size: 0.8rem; }
+.popup-status { margin-top: 6px; font-size: 0.82rem; color: var(--text-muted); }
+.popup-status .status { font-weight: 600; }
+.popup-status .is-open { color: var(--success); }
+.popup-status .is-closed { color: var(--text-muted); }
+
+.popup-section { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.shop-popup .section-head h5 { margin: 0; }
+.section-head .speed-badge { margin: 0; font-size: 0.75rem; }
+.section-head .add-link { margin-left: auto; }
+
+.code-item + .code-item { margin-top: 8px; }
+.code-line { display: flex; align-items: center; gap: 8px; }
+.shop-popup .code-chip {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 9px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+.shop-popup .code-chip:hover { background: var(--border); }
+.code-value { overflow-wrap: anywhere; }
+.copy-icon { font-family: var(--font-sans); font-size: 0.85rem; color: var(--text-muted); }
+.shop-popup .code-none {
+    cursor: default;
+    font-family: var(--font-sans);
+    font-size: 0.9rem;
+    color: var(--success);
+    background: var(--success-bg);
+}
+
+.votes { display: flex; gap: 4px; flex-shrink: 0; }
+.shop-popup .votes .vote-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 7px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+}
+.votes .vote-btn span { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); }
+.code-meta { margin-top: 3px; padding-left: 2px; font-size: 0.75rem; color: var(--text-muted); }
+
+/* Text buttons: "+ Add", "+ network name", "Test Wi-Fi speed" */
+.shop-popup .meta-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--primary);
+    cursor: pointer;
+}
+.shop-popup .meta-link:hover { background: none; text-decoration: underline; }
+
+.add-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.add-form[hidden], .inline-form[hidden] { display: none; }
+.inline-form { display: flex; gap: 6px; margin-top: 6px; }
+.add-form .inline-form { margin-top: 0; }
+.shop-popup .inline-form input, .shop-popup input.ssid-new {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 0.88rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+}
+.shop-popup .btn-small { padding: 5px 10px; font-size: 0.82rem; }
+.shop-popup .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.shop-popup .btn-primary:hover { background: var(--primary-dark); }
+.add-form .meta-link { align-self: flex-start; }
+
+.shop-popup .did-it-work {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0 0;
+    padding: 6px 8px;
+    font-size: 0.85rem;
+}
+.shop-popup .did-it-work span { flex: 1; }
+.shop-popup .did-it-work button:not(.meta-link) { padding: 2px 8px; }
+
+.popup-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
+}
+.popup-footer a { color: var(--text-muted); font-weight: 600; text-decoration: none; }
+.popup-footer a:hover { color: var(--primary); }
+.popup-none { margin: 2px 0; font-size: 0.85rem; }
+
+.more-codes { margin-top: 8px; }
+.more-codes[hidden] { display: none; }
+.shop-popup .more-link { margin-top: 6px; color: var(--text-muted); }
