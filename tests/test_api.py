@@ -313,3 +313,49 @@ def test_speed_summary_keeps_most_common_network(client):
         db.session.commit()
         summary = speed_summaries([1])[1]
         assert (summary['mbps'], summary['tests']) == (55, 3)
+
+
+# ---- No code needed / open network ---------------------------------------
+
+def test_suggest_no_code_bathroom(client):
+    r = client.post('/api/suggest', json={'shop_id': 2, 'item_type': 'bathroom_codes', 'no_code': True})
+    item = r.get_json()['shop']['bathroom_codes'][0]
+    assert (item['no_code'], item['code'], item['votes']) == (True, '', 1)
+    again = client.post('/api/suggest', json={'shop_id': 2, 'item_type': 'bathroom_codes', 'no_code': True})
+    assert again.status_code == 409
+
+
+def test_suggest_open_network_with_ssid(client):
+    r = client.post('/api/suggest', json={'shop_id': 2, 'item_type': 'wifi_passwords',
+                                          'no_code': True, 'ssid': 'CafeFree'})
+    item = r.get_json()['shop']['wifi_passwords'][0]
+    assert (item['no_code'], item['ssid']) == (True, 'CafeFree')
+    assert b'Open network (no password)' in client.get('/shop/2/x', follow_redirects=True).data
+    assert b'Open network (no password)' in client.get('/shop/2.txt').data
+
+
+def test_typed_no_password_is_rejected_with_hint(client):
+    r = client.post('/api/suggest', json={'shop_id': 2, 'item_type': 'wifi_passwords',
+                                          'item_value': 'no-password'})
+    assert r.status_code == 400 and 'No password' in r.get_json()['error']
+
+
+def test_convert_placeholders(client):
+    import convert_placeholders
+    with app.app_context():
+        db.session.add(BathroomCode(id=30, code='0000', votes=3, coffee_shop_id=2))
+        db.session.add(WifiPassword(id=31, password='no-password', votes=2, coffee_shop_id=2))
+        db.session.add(WifiPassword(id=32, password='<open-network>', votes=1, coffee_shop_id=2))
+        db.session.commit()
+        n = convert_placeholders.convert(BathroomCode, 'code', lambda v: v == '0000', 'bathroom_code')
+        n += convert_placeholders.convert(
+            WifiPassword, 'password', lambda v: v.lower() in app_module.NO_PASSWORD_WORDS, 'wifi_password')
+        db.session.commit()
+        assert n == 3
+        bc = db.session.get(BathroomCode, 30)
+        assert (bc.no_code, bc.code, bc.votes) == (True, '', 3)
+        # The two open-network rows at one shop merge into one, votes added.
+        open_rows = WifiPassword.query.filter_by(coffee_shop_id=2, no_code=True).all()
+        assert len(open_rows) == 1 and open_rows[0].votes == 3
+        # Real codes stay as they are.
+        assert db.session.get(BathroomCode, 20).code == '1234'

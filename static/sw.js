@@ -1,11 +1,12 @@
 // Bump CACHE on any change to the precache list or caching strategy.
 // The activate handler deletes every other cache, which evicts the old
 // poisoned 'v1' cache-first store that was serving stale HTML to users.
-const CACHE = 'got2go-v2';
+const CACHE = 'got2go-v3';
 const PRECACHE = [
   '/',
   '/static/style.css',
   '/static/app.js',
+  '/static/hours.js',
   '/static/logo-toilet.png'
 ];
 

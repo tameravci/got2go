@@ -132,6 +132,7 @@
                 <span class="legend-chip"><span class="legend-dot dot-wifi"></span>Wi-Fi</span>
                 <span class="legend-chip"><span class="legend-dot dot-bathroom"></span>bathroom</span>
                 <span class="legend-chip"><span class="legend-dot dot-restroom"></span>public restroom</span>
+                <span class="legend-chip"><span class="legend-dot dot-closed"></span>closed now</span>
                 <span class="legend-chip legend-empty"><span class="legend-dot dot-empty"></span>nothing yet, add one!</span>
             </div>
             <button id="zoom-in-hint" type="button">Zoom in to add a code to a gray pin</button>
@@ -142,6 +143,7 @@
     </div>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="{{ url_for('static', filename='hours.js', v=version) }}"></script>
     <script src="{{ url_for('static', filename='app.js', v=version) }}"></script>
     <div id="toast"></div>
     <div id="speed-card" role="dialog" aria-live="polite" hidden>

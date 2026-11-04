@@ -28,7 +28,17 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
+// true = open, false = closed, null = no readable hours. Uses the
+// device's clock, so it matches the visitor's local time.
+function openNow(shop) {
+    return window.OpeningHours ? OpeningHours.isOpenNow(shop.tags && shop.tags.opening_hours) : null;
+}
+
 function shopPinClass(shop) {
+    return basePinClass(shop) + (openNow(shop) === false ? ' pin-closed' : '');
+}
+
+function basePinClass(shop) {
     if (shop.category === 'restroom') return 'pin pin-restroom';
     const hasWifi = shop.wifi_passwords && shop.wifi_passwords.length > 0;
     const hasBathroom = shop.bathroom_codes && shop.bathroom_codes.length > 0;
@@ -142,8 +152,10 @@ function codeRow(shop, itemType, item) {
     }
     return network + `
         <div class="popup-row">
-            <code class="${itemType === 'wifi_passwords' ? 'popup-password' : 'popup-code'}">${escapeHtml(value)}</code>
-            <button class="copy-button" aria-label="Copy" data-action="copy" data-value="${escapeHtml(value)}" ${ids}>📋</button>
+            ${item.no_code
+                ? `<span class="no-code">${itemType === 'wifi_passwords' ? '🔓 Open network, no password' : '🔓 No code needed'}</span>`
+                : `<code class="${itemType === 'wifi_passwords' ? 'popup-password' : 'popup-code'}">${escapeHtml(value)}</code>
+            <button class="copy-button" aria-label="Copy" data-action="copy" data-value="${escapeHtml(value)}" ${ids}>📋</button>`}
             <span class="vote-count" title="votes">${item.votes}</span>
             <button class="vote-btn ${up}" aria-label="It worked" title="It worked" data-action="vote" data-vote="upvote" ${ids}>👍</button>
             <button class="vote-btn ${down}" aria-label="It didn't work" title="It didn't work" data-action="vote" data-vote="downvote" ${ids}>👎</button>
@@ -174,6 +186,12 @@ function codeSection(shop, itemType, title) {
             <input type="text" id="${inputId}" ${attrs}>
             <button class="suggest-btn" data-action="suggest" data-shop="${shop.id}" data-type="${itemType}" data-input="${inputId}">Add</button>
         </div>`;
+    // Some places need no code, or run an open network. Hide the button
+    // once that answer is already listed.
+    if (!items.some(i => i.no_code)) {
+        const label = itemType === 'wifi_passwords' ? 'No password (open network)' : 'No code needed';
+        html += `<button class="link-btn" data-action="suggest-none" data-shop="${shop.id}" data-type="${itemType}" data-input="${inputId}">🔓 ${label}</button>`;
+    }
     if (itemType === 'wifi_passwords') {
         html += `<button class="link-btn" data-action="speedtest" data-shop="${shop.id}">⚡ Test this Wi-Fi's speed</button>`;
     }
@@ -185,6 +203,8 @@ function createPopupContent(shop) {
     let content = `<div class="popup-header"><b>${escapeHtml(shop.name)}</b><br><small>${escapeHtml(shop.address || '')}</small></div>`;
 
     const labels = featureLabels(shop.tags);
+    const open = openNow(shop);
+    if (open !== null) labels.unshift(open ? '🟢 Open now' : '⚪ Closed now');
     if (labels.length) {
         content += `<div class="popup-chips">${labels.map(l => `<span>${escapeHtml(l)}</span>`).join('')}</div>`;
     }
@@ -237,6 +257,9 @@ document.addEventListener('click', function (event) {
         case 'suggest':
             suggest(shopId, itemType, el.dataset.input);
             break;
+        case 'suggest-none':
+            suggest(shopId, itemType, el.dataset.input, true);
+            break;
         case 'speedtest':
             runSpeedTest(shopId);
             break;
@@ -260,6 +283,7 @@ document.addEventListener('input', function (event) {
 
 function shopCounts(shop) {
     const parts = [];
+    if (openNow(shop) === false) parts.push(`<span class="count-pill count-closed">closed</span>`);
     if (shop.category === 'restroom') parts.push(`<span class="count-pill count-restroom">🚻 public</span>`);
     const w = (shop.wifi_passwords || []).length;
     const b = (shop.bathroom_codes || []).length;
@@ -282,7 +306,7 @@ function rememberShops(shops) {
 function sortForSidebar(shops) {
     const ref = userLatLng || map.getCenter();
     const dist = s => haversineDistance(ref.lat, ref.lng, s.lat, s.lng);
-    const rank = s => (hasCodes(s) ? 2 : 0) + (s.category === 'restroom' ? 1 : 0);
+    const rank = s => (openNow(s) === false ? 0 : 4) + (hasCodes(s) ? 2 : 0) + (s.category === 'restroom' ? 1 : 0);
     return shops.slice().sort((a, b) => (rank(b) - rank(a)) || (dist(a) - dist(b)));
 }
 
@@ -472,6 +496,16 @@ document.addEventListener('DOMContentLoaded', function () {
     }).addTo(map);
 
     map.on('moveend', debounce(loadViewport, 150));
+
+    // Places open and close while the map is open. Recheck every minute.
+    setInterval(() => {
+        markerById.forEach((marker, id) => {
+            const shop = shopsById.get(id);
+            if (shop && marker.options.icon.options.className !== shopPinClass(shop)) {
+                marker.setIcon(shopIcon(shop));
+            }
+        });
+    }, 60 * 1000);
     loadViewport();
 
     document.getElementById('search-input').addEventListener('input', debouncedSearch);
@@ -789,14 +823,15 @@ function handleVote(shopId, itemType, voteType, itemId) {
     });
 }
 
-function suggest(shopId, itemType, inputId) {
-    const itemValue = document.getElementById(inputId).value;
-    if (!itemValue) {
+function suggest(shopId, itemType, inputId, noCode = false) {
+    const itemValue = noCode ? '' : document.getElementById(inputId).value;
+    if (!itemValue && !noCode) {
         showToast('Please enter a value.');
         return;
     }
     const ssidInput = document.getElementById(`${inputId}-ssid`);
     const body = { shop_id: shopId, item_type: itemType, item_value: itemValue };
+    if (noCode) body.no_code = true;
     if (ssidInput && ssidInput.value.trim()) body.ssid = ssidInput.value.trim();
     fetch(`${API_BASE_URL}/api/suggest`, {
         method: 'POST',

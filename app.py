@@ -50,6 +50,13 @@ RATE_LIMIT_MAX_WRITES = 30  # POST-only: votes + suggestions
 
 # Codes at or below this score are hidden everywhere.
 HIDE_AT_VOTES = -3
+
+# Shown instead of a value when people report that none is needed.
+NO_CODE_LABEL = "No code needed"
+NO_PASSWORD_LABEL = "Open network (no password)"
+# Typed passwords that really mean "no password". Rejected with a hint.
+NO_PASSWORD_WORDS = {'no-password', 'nopassword', 'no_password', 'none', 'open',
+                     '<open-network>', 'open-network', 'n/a', 'na', '-'}
 # Upper bound on shops returned for one map viewport.
 MAX_SHOPS_PER_QUERY = 1000
 
@@ -248,6 +255,12 @@ class WifiPassword(db.Model):
     coffee_shop_id = db.Column(db.Integer, db.ForeignKey('coffee_shop.id'), nullable=False)
     # The network name. Optional: older passwords have none.
     ssid = db.Column(db.String(32))
+    # True for an open network. `password` is then ''.
+    no_code = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+
+    @property
+    def display(self):
+        return NO_PASSWORD_LABEL if self.no_code else self.password
     created_at = db.Column(db.DateTime)
     # Set when the code is added and on each upvote ("it worked").
     last_confirmed_at = db.Column(db.DateTime)
@@ -259,6 +272,7 @@ class WifiPassword(db.Model):
         return {
             'id': self.id,
             'password': self.password,
+            'no_code': bool(self.no_code),
             'ssid': self.ssid,
             'votes': self.votes,
             'created_at': iso(self.created_at),
@@ -274,6 +288,13 @@ class BathroomCode(db.Model):
     # Set when the code is added and on each upvote ("it worked").
     last_confirmed_at = db.Column(db.DateTime)
 
+    # True when the restroom needs no code. `code` is then ''.
+    no_code = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+
+    @property
+    def display(self):
+        return NO_CODE_LABEL if self.no_code else self.code
+
     def __repr__(self):
         return f'<BathroomCode {self.code}>'
 
@@ -281,6 +302,7 @@ class BathroomCode(db.Model):
         return {
             'id': self.id,
             'code': self.code,
+            'no_code': bool(self.no_code),
             'votes': self.votes,
             'created_at': iso(self.created_at),
             'last_confirmed_at': iso(self.last_confirmed_at),
@@ -614,9 +636,9 @@ def shop_detail(shop_id, slug=None):
 
     additional = (
         [{"@type": "PropertyValue", "name": "Wi-Fi password",
-          "value": wp.password, "description": f"{wp.votes} community votes"} for wp in wifi]
+          "value": wp.display, "description": f"{wp.votes} community votes"} for wp in wifi]
         + [{"@type": "PropertyValue", "name": "Bathroom code",
-            "value": bc.code, "description": f"{bc.votes} community votes"} for bc in bathroom]
+            "value": bc.display, "description": f"{bc.votes} community votes"} for bc in bathroom]
     )
     jsonld = {
         "@context": "https://schema.org",
@@ -651,12 +673,12 @@ def _shop_plaintext(shop):
         "Bathroom codes (most upvoted first):",
     ]
     if bathroom:
-        lines += [f"  {i}. {bc.code}  (votes: {bc.votes})" for i, bc in enumerate(bathroom, 1)]
+        lines += [f"  {i}. {bc.display}  (votes: {bc.votes})" for i, bc in enumerate(bathroom, 1)]
     else:
         lines.append("  none reported yet")
     lines += ["", "Wi-Fi passwords (most upvoted first):"]
     if wifi:
-        lines += [f"  {i}. {wp.password}" + (f"  (network: {wp.ssid})" if wp.ssid else "")
+        lines += [f"  {i}. {wp.display}" + (f"  (network: {wp.ssid})" if wp.ssid else "")
                   + f"  (votes: {wp.votes})" for i, wp in enumerate(wifi, 1)]
     else:
         lines.append("  none reported yet")
@@ -702,8 +724,8 @@ def api_lookup():
             "address": s.address,
             "lat": s.lat,
             "lng": s.lng,
-            "top_wifi_password": wifi[0].password if wifi else None,
-            "top_bathroom_code": bathroom[0].code if bathroom else None,
+            "top_wifi_password": wifi[0].display if wifi else None,
+            "top_bathroom_code": bathroom[0].display if bathroom else None,
             "url": site_url(url_for('shop_detail', shop_id=s.id, slug=s.slug)),
         })
     return jsonify({"query": q, "count": len(results), "results": results})
@@ -879,7 +901,13 @@ def suggest():
     item_type = data.get('item_type')
     item_value = data.get('item_value')
     ssid = data.get('ssid')
-    if not isinstance(shop_id, int) or not isinstance(item_value, str) or not item_value:
+    # no_code: "this restroom needs no code" or "this Wi-Fi has no password".
+    no_code = data.get('no_code') is True
+    if no_code:
+        item_value = ''
+    elif not isinstance(item_value, str) or not item_value:
+        return jsonify({"error": "Invalid suggestion."}), 400
+    if not isinstance(shop_id, int):
         return jsonify({"error": "Invalid suggestion."}), 400
     ssid = ssid.strip() if isinstance(ssid, str) else ''
     if len(ssid) > SSID_MAX:
@@ -894,6 +922,8 @@ def suggest():
     if item_type == 'wifi_passwords':
         if ' ' in item_value:
             return jsonify({"error": "Wi-Fi password cannot contain spaces."}), 400
+        if not no_code and item_value.lower() in NO_PASSWORD_WORDS:
+            return jsonify({"error": "Tap \"No password\" for an open network."}), 400
         if len(item_value) > 16:
             return jsonify({"error": "Wi-Fi password cannot be longer than 16 characters."}), 400
         Model = WifiPassword
@@ -904,7 +934,7 @@ def suggest():
             return jsonify({"error": "Bathroom code cannot contain spaces."}), 400
         if len(item_value) > 12:
             return jsonify({"error": "Bathroom code cannot be longer than 12 characters."}), 400
-        if not item_value or not all(c in '0123456789*#' for c in item_value):
+        if not no_code and not all(c in '0123456789*#' for c in item_value):
             return jsonify({"error": "Bathroom code can only contain digits, * and #."}), 400
         Model = BathroomCode
         item_type_str = 'bathroom_code'
@@ -927,9 +957,9 @@ def suggest():
         new_item.votes = 1 # Reset votes if re-activating a previously downvoted item
     else:
         if item_type == 'wifi_passwords':
-            new_item = Model(password=item_value, coffee_shop=shop, votes=0)
+            new_item = Model(password=item_value, coffee_shop=shop, votes=0, no_code=no_code)
         else:
-            new_item = Model(code=item_value, coffee_shop=shop, votes=0)
+            new_item = Model(code=item_value, coffee_shop=shop, votes=0, no_code=no_code)
         new_item.created_at = now
         db.session.add(new_item)
     if item_type == 'wifi_passwords' and ssid:
@@ -1048,9 +1078,11 @@ ADDED_COLUMNS = {
         ('tags_json', 'TEXT'),
     ],
     'wifi_password': [('created_at', 'DATETIME'), ('last_confirmed_at', 'DATETIME'),
-                      ('ssid', 'VARCHAR(32)')],
+                      ('ssid', 'VARCHAR(32)'),
+                      ('no_code', 'BOOLEAN NOT NULL DEFAULT 0')],
     'speed_test': [('ip_hash', 'VARCHAR(16)')],
-    'bathroom_code': [('created_at', 'DATETIME'), ('last_confirmed_at', 'DATETIME')],
+    'bathroom_code': [('created_at', 'DATETIME'), ('last_confirmed_at', 'DATETIME'),
+                      ('no_code', 'BOOLEAN NOT NULL DEFAULT 0')],
 }
 
 

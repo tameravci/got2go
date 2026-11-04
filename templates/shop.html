@@ -1,6 +1,6 @@
 {% extends "_page.html" %}
-{% set wifi_summary = (wifi[0].password if wifi else None) %}
-{% set bath_summary = (bathroom[0].code if bathroom else None) %}
+{% set wifi_summary = (wifi[0].display if wifi else None) %}
+{% set bath_summary = (bathroom[0].display if bathroom else None) %}
 {% set place = (hood.name ~ ', Seattle') if hood else 'Seattle' %}
 {% set features = feature_labels(shop.tags) %}
 {% if shop.is_restroom %}
@@ -87,7 +87,7 @@ Public restroom at {{ shop.name }} in {{ place }}{% if features %}: {{ features 
             {% for bc in bathroom %}
             <li>
                 {% if loop.first %}<span class="top">Top</span>{% endif %}
-                <code>{{ bc.code }}</code>
+                {% if bc.no_code %}<strong>{{ bc.display }}</strong>{% else %}<code>{{ bc.code }}</code>{% endif %}
                 {% if bc.last_confirmed_at %}<span class="muted">worked {{ bc.last_confirmed_at | ago }}</span>{% endif %}
                 <span class="votes">{{ bc.votes }} vote{{ '' if bc.votes == 1 else 's' }}</span>
             </li>
@@ -110,7 +110,7 @@ Public restroom at {{ shop.name }} in {{ place }}{% if features %}: {{ features 
             <li>
                 {% if loop.first %}<span class="top">Top</span>{% endif %}
                 {% if wp.ssid %}<span>Network <strong>{{ wp.ssid }}</strong></span>{% endif %}
-                <code>{{ wp.password }}</code>
+                {% if wp.no_code %}<strong>{{ wp.display }}</strong>{% else %}<code>{{ wp.password }}</code>{% endif %}
                 {% if wp.last_confirmed_at %}<span class="muted">worked {{ wp.last_confirmed_at | ago }}</span>{% endif %}
                 <span class="votes">{{ wp.votes }} vote{{ '' if wp.votes == 1 else 's' }}</span>
             </li>
