@@ -1,8 +1,23 @@
 const API_BASE_URL = ''; // same-origin: works on prod, piku, localhost
-let allCoffeeShops = [];
+
+// At this zoom and closer, the map shows every shop, gray pins included.
+// Farther out, it shows only shops that have a code.
+const DETAIL_ZOOM = 16;
+// Zoom for "my location" on first open and on the Find Nearby button.
+const LOCATE_ZOOM = 17;
+const MAX_SIDEBAR_ITEMS = 100;
+
+const shopsById = new Map();   // every shop the client has seen
+const markerById = new Map();  // shops that have a marker on the map now
 let markers;
 let map;
 let userLocationLayer = null;
+let userLatLng = null;
+let viewportRequest = null;    // AbortController for the newest viewport fetch
+let visibleShopIds = [];
+let searchActive = false;
+let pendingOpenId = null;      // open this shop's popup after the next load
+let locateFromButton = false;
 
 function escapeHtml(unsafe) {
     return unsafe
@@ -111,19 +126,36 @@ function shopCounts(shop) {
     return `<div class="shop-counts">${parts.join(' ')}</div>`;
 }
 
-function populateSidebar(shopsToDisplay) {
-    var shopListDiv = document.getElementById('shop-list');
+function hasCodes(shop) {
+    return (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
+        (shop.bathroom_codes && shop.bathroom_codes.length > 0);
+}
+
+function rememberShops(shops) {
+    shops.forEach(shop => shopsById.set(shop.id, shop));
+}
+
+// Sidebar order: shops with codes first, then the closest to the user
+// (or to the map center when the location is unknown).
+function sortForSidebar(shops) {
+    const ref = userLatLng || map.getCenter();
+    const dist = s => haversineDistance(ref.lat, ref.lng, s.lat, s.lng);
+    return shops.slice().sort((a, b) =>
+        (hasCodes(b) - hasCodes(a)) || (dist(a) - dist(b)));
+}
+
+function populateSidebar(shopsToDisplay, emptyMessage) {
+    const shopListDiv = document.getElementById('shop-list');
     shopListDiv.innerHTML = '';
 
     if (shopsToDisplay.length === 0) {
-        shopListDiv.innerHTML = '<div class="empty-state">No shops match — try a broader search, or tap <strong>Find Nearby</strong>.</div>';
+        shopListDiv.innerHTML = `<div class="empty-state">${emptyMessage ||
+            'No shops here. Zoom in, or tap <strong>Find Nearby</strong>.'}</div>`;
         return;
     }
 
-    shopsToDisplay.sort((a, b) => a.name.localeCompare(b.name));
-
-    shopsToDisplay.forEach(function (shop) {
-        var listItem = document.createElement('div');
+    shopsToDisplay.slice(0, MAX_SIDEBAR_ITEMS).forEach(function (shop) {
+        const listItem = document.createElement('div');
         listItem.className = 'shop-list-item';
         listItem.innerHTML = `
             <div class="shop-list-main">
@@ -132,82 +164,104 @@ function populateSidebar(shopsToDisplay) {
             </div>
             ${shopCounts(shop)}
         `;
-        listItem.onclick = function() {
-            const clickedShop = allCoffeeShops.find(s => s.id === shop.id);
-            if (!clickedShop) return;
-
-            let targetMarker = null;
-            markers.eachLayer(function(layer) {
-                if (layer.shopId === clickedShop.id) targetMarker = layer;
-            });
-
-            if (!targetMarker) {
-                targetMarker = L.marker([clickedShop.lat, clickedShop.lng], { icon: shopIcon(clickedShop) });
-                targetMarker.shopId = clickedShop.id;
-                targetMarker.bindPopup(createPopupContent(clickedShop));
-                targetMarker.on('click', function() {
-                    fetch(`${API_BASE_URL}/api/coffee_shops/${clickedShop.id}`)
-                        .then(r => r.json())
-                        .then(updatedShop => {
-                            updateShopInAllCoffeeShops(updatedShop);
-                            refreshMarker(clickedShop.id);
-                        });
-                });
-                markers.addLayer(targetMarker);
-            }
-
-            map.flyTo([clickedShop.lat, clickedShop.lng], 17, { duration: 0.5 });
-            setTimeout(() => {
-                if (markers.zoomToShowLayer) {
-                    markers.zoomToShowLayer(targetMarker, () => targetMarker.openPopup());
-                } else {
-                    targetMarker.openPopup();
-                }
-            }, 250);
-
-            var sidebar = document.getElementById('sidebar');
-            if (sidebar.classList.contains('sidebar-open')) {
-                sidebar.classList.remove('sidebar-open');
-                map.invalidateSize();
-            }
-        };
+        listItem.onclick = () => focusShop(shop.id);
         shopListDiv.appendChild(listItem);
     });
 }
 
-function displayCoffeeShops(shopsToDisplayOnMap) {
-    shopsToDisplayOnMap.forEach(function (shop) {
-        let markerExists = false;
-        markers.eachLayer(function(layer) {
-            if (layer.shopId === shop.id) markerExists = true;
-        });
+// Fly to a shop and open its popup. The viewport load after the flight
+// creates the marker if the shop was not on the map yet.
+function focusShop(shopId) {
+    const shop = shopsById.get(shopId);
+    if (!shop) return;
+    pendingOpenId = shopId;
+    map.flyTo([shop.lat, shop.lng], Math.max(map.getZoom(), LOCATE_ZOOM), { duration: 0.5 });
 
-        if (!markerExists) {
-            var marker = L.marker([shop.lat, shop.lng], { icon: shopIcon(shop) });
-            marker.shopId = shop.id;
-            marker.bindPopup(createPopupContent(shop));
-            marker.on('click', function() {
-                fetch(`${API_BASE_URL}/api/coffee_shops/${shop.id}`)
-                    .then(r => r.json())
-                    .then(updatedShop => {
-                        updateShopInAllCoffeeShops(updatedShop);
-                        refreshMarker(shop.id);
-                    });
-            });
-            markers.addLayer(marker);
-        }
-    });
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar.classList.contains('sidebar-open')) {
+        sidebar.classList.remove('sidebar-open');
+        map.invalidateSize();
+    }
 }
 
-function updateMarkers() {
-    const showAll = document.getElementById('show-all-locations').checked;
-    const shopsToDisplay = showAll
-        ? allCoffeeShops
-        : allCoffeeShops.filter(s =>
-            (s.wifi_passwords && s.wifi_passwords.length > 0) ||
-            (s.bathroom_codes && s.bathroom_codes.length > 0));
-    markers.clearLayers();
-    displayCoffeeShops(shopsToDisplay);
+function openPendingPopup() {
+    if (pendingOpenId === null) return;
+    const marker = markerById.get(pendingOpenId);
+    if (!marker) return;
+    pendingOpenId = null;
+    markers.zoomToShowLayer(marker, () => marker.openPopup());
+}
+
+function createMarker(shop) {
+    const marker = L.marker([shop.lat, shop.lng], { icon: shopIcon(shop) });
+    marker.shopId = shop.id;
+    // Build the popup when it opens, so it always shows the newest data.
+    marker.bindPopup(() => createPopupContent(shopsById.get(shop.id)));
+    return marker;
+}
+
+// Make the markers on the map match `shops`. A marker with an open popup
+// stays, so a small pan never closes the shop the user is reading.
+function syncMarkers(shops) {
+    const wanted = new Set(shops.map(s => s.id));
+    const toRemove = [];
+    markerById.forEach((marker, id) => {
+        if (!wanted.has(id) && !marker.isPopupOpen()) toRemove.push(id);
+    });
+    markers.removeLayers(toRemove.map(id => markerById.get(id)));
+    toRemove.forEach(id => markerById.delete(id));
+
+    const toAdd = [];
+    shops.forEach(shop => {
+        const existing = markerById.get(shop.id);
+        if (existing) {
+            existing.setIcon(shopIcon(shop));
+        } else {
+            const marker = createMarker(shop);
+            markerById.set(shop.id, marker);
+            toAdd.push(marker);
+        }
+    });
+    markers.addLayers(toAdd);
+}
+
+function updateZoomHint() {
+    const zoomedIn = map.getZoom() >= DETAIL_ZOOM;
+    document.body.classList.toggle('zoomed-in', zoomedIn);
+}
+
+// Load the shops for the current map view. Zoomed out: only shops with
+// codes. Zoomed in: every shop, so people can add a code to a gray pin.
+function loadViewport() {
+    updateZoomHint();
+    if (viewportRequest) viewportRequest.abort();
+    viewportRequest = new AbortController();
+
+    const b = map.getBounds().pad(0.2);
+    const bbox = [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()]
+        .map(n => n.toFixed(5)).join(',');
+    const params = new URLSearchParams({ bbox });
+    if (map.getZoom() < DETAIL_ZOOM) params.set('has_codes', '1');
+
+    return fetch(`${API_BASE_URL}/api/coffee_shops?${params}`, { signal: viewportRequest.signal })
+        .then(r => r.json())
+        .then(shops => {
+            rememberShops(shops);
+            syncMarkers(shops);
+            visibleShopIds = shops.map(s => s.id);
+            if (!searchActive) showViewportInSidebar();
+            openPendingPopup();
+        })
+        .catch(err => { if (err.name !== 'AbortError') showToast('Could not load shops.'); })
+        .finally(() => { document.getElementById('loading-indicator').style.display = 'none'; });
+}
+
+function showViewportInSidebar() {
+    const inView = map.getBounds();
+    const shops = visibleShopIds
+        .map(id => shopsById.get(id))
+        .filter(s => s && inView.contains([s.lat, s.lng]));
+    populateSidebar(sortForSidebar(shops));
 }
 
 function haversineDistance(lat1, lon1, lat2, lon2) {
@@ -229,26 +283,30 @@ function debounce(func, delay) {
     };
 }
 
-const debouncedSearch = debounce(function() {
-    var searchTerm = this.value.toLowerCase();
-    var filteredShops = allCoffeeShops.filter(shop =>
-        shop.name.toLowerCase().includes(searchTerm) ||
-        (shop.address || '').toLowerCase().includes(searchTerm));
-    populateSidebar(filteredShops);
-
-    const mappable = filteredShops.filter(s =>
-        (s.wifi_passwords && s.wifi_passwords.length > 0) ||
-        (s.bathroom_codes && s.bathroom_codes.length > 0));
-    markers.clearLayers();
-    displayCoffeeShops(mappable);
-
-    document.getElementById('clear-search').style.display = this.value ? 'inline-block' : 'none';
+const debouncedSearch = debounce(function () {
+    const term = this.value.trim();
+    document.getElementById('clear-search').style.display = term ? 'inline-block' : 'none';
+    searchActive = term.length > 0;
+    if (!searchActive) {
+        showViewportInSidebar();
+        return;
+    }
+    fetch(`${API_BASE_URL}/api/coffee_shops?${new URLSearchParams({ q: term })}`)
+        .then(r => r.json())
+        .then(shops => {
+            if (document.getElementById('search-input').value.trim() !== term) return;
+            rememberShops(shops);
+            populateSidebar(sortForSidebar(shops), 'No shops match that search.');
+        });
 }, 300);
 
-document.addEventListener('DOMContentLoaded', function () {
-    const loadingIndicator = document.getElementById('loading-indicator');
-    loadingIndicator.style.display = 'flex';
+function locateUser(fromButton) {
+    locateFromButton = fromButton;
+    if (fromButton) document.getElementById('nearby-spinner').style.display = 'flex';
+    map.locate({ setView: true, maxZoom: LOCATE_ZOOM });
+}
 
+document.addEventListener('DOMContentLoaded', function () {
     map = L.map('map', { maxZoom: 19 }).setView([47.6062, -122.3321], 13);
     markers = L.markerClusterGroup({
         showCoverageOnHover: false,
@@ -265,15 +323,8 @@ document.addEventListener('DOMContentLoaded', function () {
         className: 'basemap-muted'
     }).addTo(map);
 
-    fetch(`${API_BASE_URL}/api/coffee_shops`)
-        .then(response => response.json())
-        .then(coffeeShops => {
-            allCoffeeShops = coffeeShops;
-            populateSidebar(allCoffeeShops);
-            updateMarkers();
-            setTimeout(() => map.invalidateSize(), 500);
-            loadingIndicator.style.display = 'none';
-        });
+    map.on('moveend', debounce(loadViewport, 150));
+    loadViewport();
 
     document.getElementById('search-input').addEventListener('input', debouncedSearch);
 
@@ -317,21 +368,28 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // Welcome modal
+    // Welcome modal. Ask for the location after the modal closes, so the
+    // browser prompt does not appear on top of it.
     const welcomeModal = document.getElementById('welcome-modal');
     const letsGoButton = document.getElementById('lets-go-button');
     const dontShowWelcomeAgainCheckbox = document.getElementById('dont-show-welcome-again');
     const hasSeenWelcome = localStorage.getItem('hasSeenWelcomeModal');
 
     function dismissWelcomeModal() {
+        if (welcomeModal.style.display === 'none') return;
         welcomeModal.style.display = 'none';
         if (dontShowWelcomeAgainCheckbox.checked) {
             localStorage.setItem('hasSeenWelcomeModal', 'true');
         } else {
             localStorage.removeItem('hasSeenWelcomeModal');
         }
+        locateUser(false);
     }
-    if (hasSeenWelcome !== 'true') welcomeModal.style.display = 'flex';
+    if (hasSeenWelcome !== 'true') {
+        welcomeModal.style.display = 'flex';
+    } else {
+        locateUser(false);
+    }
     letsGoButton.addEventListener('click', dismissWelcomeModal);
     welcomeModal.addEventListener('click', (event) => {
         if (event.target === welcomeModal) dismissWelcomeModal();
@@ -350,14 +408,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    document.getElementById('show-all-locations').addEventListener('change', updateMarkers);
-
-    document.getElementById('find-me-button').addEventListener('click', function() {
-        document.getElementById('nearby-spinner').style.display = 'flex';
-        map.locate({ setView: true, maxZoom: 16 });
+    document.getElementById('zoom-in-hint').addEventListener('click', function () {
+        map.setZoom(DETAIL_ZOOM);
     });
 
+    document.getElementById('find-me-button').addEventListener('click', () => locateUser(true));
+
     map.on('locationfound', function(e) {
+        userLatLng = e.latlng;
         if (userLocationLayer) {
             map.removeLayer(userLocationLayer);
         }
@@ -368,23 +426,15 @@ document.addEventListener('DOMContentLoaded', function () {
             fillOpacity: 0.08,
             weight: 1.5
         }).addTo(map);
-
-        const nearbyShops = allCoffeeShops.filter(shop =>
-            haversineDistance(e.latlng.lat, e.latlng.lng, shop.lat, shop.lng) <= 0.3);
-
-        markers.clearLayers();
-        populateSidebar(nearbyShops);
-        displayCoffeeShops(nearbyShops);
         document.getElementById('nearby-spinner').style.display = 'none';
-
-        if (nearbyShops.length === 0) {
-            showToast("No coffee shops within 0.3 miles of you.");
-        }
+        // setView triggers moveend, which loads the shops around the user.
     });
 
     map.on('locationerror', function(e) {
-        showToast(e.message);
         document.getElementById('nearby-spinner').style.display = 'none';
+        // Stay quiet on first open: a user who declines the prompt still
+        // gets the city map. Explain only when they pressed the button.
+        if (locateFromButton) showToast(e.message);
     });
 });
 
@@ -431,7 +481,7 @@ function handleVote(shopId, itemType, voteType, itemId) {
         return Promise.reject('Error voting');
     }).then(updatedShop => {
         if (updatedShop) {
-            updateShopInAllCoffeeShops(updatedShop);
+            rememberShops([updatedShop]);
             refreshMarker(shopId);
         }
     });
@@ -453,7 +503,7 @@ function suggest(shopId, itemType, inputId) {
         return Promise.reject('Error suggesting item');
     }).then(data => {
         if (data) {
-            updateShopInAllCoffeeShops(data.shop);
+            rememberShops([data.shop]);
             refreshMarker(shopId);
             document.getElementById(inputId).value = '';
             showToast('Added — thanks!');
@@ -461,19 +511,10 @@ function suggest(shopId, itemType, inputId) {
     });
 }
 
-function updateShopInAllCoffeeShops(updatedShop) {
-    const index = allCoffeeShops.findIndex(shop => shop.id === updatedShop.id);
-    if (index !== -1) allCoffeeShops[index] = updatedShop;
-}
-
 function refreshMarker(shopId) {
-    const shop = allCoffeeShops.find(s => s.id === shopId);
-    if (!shop) return;
-    markers.eachLayer(function (layer) {
-        if (layer.shopId === shopId) {
-            layer.setIcon(shopIcon(shop));
-            layer.setPopupContent(createPopupContent(shop));
-            if (layer.isPopupOpen && layer.isPopupOpen()) layer.openPopup();
-        }
-    });
+    const shop = shopsById.get(shopId);
+    const marker = markerById.get(shopId);
+    if (!shop || !marker) return;
+    marker.setIcon(shopIcon(shop));
+    if (marker.isPopupOpen()) marker.setPopupContent(createPopupContent(shop));
 }

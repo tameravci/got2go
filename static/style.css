@@ -325,6 +325,29 @@ body {
     font-size: 0.78rem;
 }
 
+/* Zoomed out, the map shows only shops with codes. This pill tells
+   people that zooming in reveals the gray pins. */
+#zoom-in-hint {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    white-space: nowrap;
+}
+#zoom-in-hint:hover { border-color: var(--primary); color: var(--primary); }
+body.zoomed-in #zoom-in-hint { display: none; }
+body:not(.zoomed-in) #map-legend .legend-empty { display: none; }
+
 /* Sidebar search */
 .search-container {
     display: flex;
@@ -732,6 +755,7 @@ body {
         padding: 6px;
     }
     #map-legend .legend-chip { font-size: 0.7rem; padding: 2px 4px; }
+    #zoom-in-hint { top: 60px; font-size: 0.75rem; }
 }
 
 @media (min-width: 769px) {

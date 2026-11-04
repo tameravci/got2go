@@ -8,12 +8,14 @@ from flask_migrate import Migrate
 import os
 import re
 import time
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
-from datetime import datetime, timedelta
+from urllib.parse import urlparse
+from sqlalchemy import or_, text
+from sqlalchemy.orm import selectinload
 
 app = Flask(__name__)
-CORS(app)
+# Other sites may read the public JSON API. Writes stay same-origin only.
+CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET"]}})
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 
 # Human-readable site metadata used for SEO / LLM-citation surfaces.
@@ -37,11 +39,16 @@ def inject_version():
 
 RATE_LIMIT_WINDOW = 600  # 10 minutes in seconds
 RATE_LIMIT_MAX_WRITES = 30  # POST-only: votes + suggestions
-ip_request_timestamps = {}
+
+# Codes at or below this score are hidden everywhere.
+HIDE_AT_VOTES = -3
+# Upper bound on shops returned for one map viewport.
+MAX_SHOPS_PER_QUERY = 1000
 
 # Database Configuration
 basedir = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'app.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.environ.get(
+    'DATABASE_PATH', os.path.join(basedir, 'app.db'))
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -79,24 +86,22 @@ class CoffeeShop(db.Model):
     def __repr__(self):
         return f'<CoffeeShop {self.name}>'
 
-    def to_dict(self, user_id=None):
+    def to_dict(self, votes=None):
+        """Serialize the shop. `votes` maps (item_type, item_id) to the
+        current user's vote, as returned by user_votes_for()."""
         wifi_passwords_data = []
-        for wp in sorted(self.wifi_passwords, key=lambda x: x.votes, reverse=True):
-            if wp.votes > -3:
-                wp_dict = wp.to_dict()
-                if user_id:
-                    user_vote = Vote.query.filter_by(user_id=user_id, item_id=wp.id, item_type='wifi_password').first()
-                    wp_dict['user_vote'] = user_vote.vote_type if user_vote else None
-                wifi_passwords_data.append(wp_dict)
+        for wp in self.active_wifi():
+            wp_dict = wp.to_dict()
+            if votes is not None:
+                wp_dict['user_vote'] = votes.get(('wifi_password', wp.id))
+            wifi_passwords_data.append(wp_dict)
 
         bathroom_codes_data = []
-        for bc in sorted(self.bathroom_codes, key=lambda x: x.votes, reverse=True):
-            if bc.votes > -3:
-                bc_dict = bc.to_dict()
-                if user_id:
-                    user_vote = Vote.query.filter_by(user_id=user_id, item_id=bc.id, item_type='bathroom_code').first()
-                    bc_dict['user_vote'] = user_vote.vote_type if user_vote else None
-                bathroom_codes_data.append(bc_dict)
+        for bc in self.active_bathroom():
+            bc_dict = bc.to_dict()
+            if votes is not None:
+                bc_dict['user_vote'] = votes.get(('bathroom_code', bc.id))
+            bathroom_codes_data.append(bc_dict)
 
         return {
             'id': self.id,
@@ -115,12 +120,12 @@ class CoffeeShop(db.Model):
     def active_wifi(self):
         """Visible Wi-Fi passwords, most-upvoted first (matches the UI/API filter)."""
         return [wp for wp in sorted(self.wifi_passwords, key=lambda x: x.votes, reverse=True)
-                if wp.votes > -3]
+                if wp.votes > HIDE_AT_VOTES]
 
     def active_bathroom(self):
         """Visible bathroom codes, most-upvoted first (matches the UI/API filter)."""
         return [bc for bc in sorted(self.bathroom_codes, key=lambda x: x.votes, reverse=True)
-                if bc.votes > -3]
+                if bc.votes > HIDE_AT_VOTES]
 
     def has_codes(self):
         """True when this shop has at least one visible Wi-Fi password or bathroom code."""
@@ -171,36 +176,122 @@ class Vote(db.Model):
     def __repr__(self):
         return f'<Vote {self.user_id} on {self.item_type}:{self.item_id} as {self.vote_type}>'
 
+class WriteEvent(db.Model):
+    """One POST from one IP. The rate limiter counts these rows.
+
+    The rows live in the database, so every worker process shares them and
+    they survive a deploy. Rows older than the window are deleted.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    ip = db.Column(db.String(64), nullable=False, index=True)
+    ts = db.Column(db.Float, nullable=False, index=True)
+
+
+def has_codes_clause():
+    """SQL filter: the shop has at least one visible Wi-Fi password or code."""
+    return or_(
+        CoffeeShop.wifi_passwords.any(WifiPassword.votes > HIDE_AT_VOTES),
+        CoffeeShop.bathroom_codes.any(BathroomCode.votes > HIDE_AT_VOTES),
+    )
+
+
+def shops_query():
+    """Base shop query. It loads all codes in two extra queries in total."""
+    return CoffeeShop.query.options(
+        selectinload(CoffeeShop.wifi_passwords),
+        selectinload(CoffeeShop.bathroom_codes),
+    )
+
+
+def user_votes_for(user_id, shops):
+    """Return {(item_type, item_id): vote_type} for one user in one query."""
+    shop_ids = [s.id for s in shops]
+    if not user_id or not shop_ids:
+        return {}
+    rows = Vote.query.filter(Vote.user_id == user_id, Vote.shop_id.in_(shop_ids)).all()
+    return {(v.item_type, v.item_id): v.vote_type for v in rows}
+
+
+def parse_bbox(raw):
+    """Parse 'south,west,north,east' into four floats. Return None if bad."""
+    try:
+        south, west, north, east = (float(x) for x in raw.split(','))
+    except (AttributeError, ValueError):
+        return None
+    if not (-90 <= south <= north <= 90 and -180 <= west <= east <= 180):
+        return None
+    return south, west, north, east
+
+
+def shop_response(shops, user_id):
+    votes = user_votes_for(user_id, shops)
+    response = jsonify([shop.to_dict(votes=votes) for shop in shops])
+    response.set_cookie('user_id', user_id, max_age=60*60*24*365*5)  # 5 years
+    return response
+
+
 @app.before_request
-def rate_limit():
+def guard_writes():
     # Reads stay free so the map and crawler-facing surfaces aren't throttled.
     if request.method != 'POST':
         return
-    ip = request.remote_addr
+
+    # Block cross-site form posts. Browsers send Origin on every POST.
+    origin = request.headers.get('Origin')
+    if origin and urlparse(origin).netloc != request.host:
+        return jsonify({"error": "Cross-origin writes are not allowed."}), 403
+
+    ip = request.remote_addr or 'unknown'
     now = time.time()
-    timestamps = [t for t in ip_request_timestamps.get(ip, []) if now - t < RATE_LIMIT_WINDOW]
-    if len(timestamps) >= RATE_LIMIT_MAX_WRITES:
+    WriteEvent.query.filter(WriteEvent.ts < now - RATE_LIMIT_WINDOW).delete()
+    if WriteEvent.query.filter_by(ip=ip).count() >= RATE_LIMIT_MAX_WRITES:
+        db.session.commit()
         return jsonify({"error": "Too many requests. Please try again later."}), 429
-    timestamps.append(now)
-    ip_request_timestamps[ip] = timestamps
+    db.session.add(WriteEvent(ip=ip, ts=now))
+    db.session.commit()
 
 @app.route('/api/coffee_shops', methods=['GET'])
 def get_coffee_shops():
+    """List shops.
+
+    Optional filters:
+      bbox=south,west,north,east  only shops inside the map viewport
+      has_codes=1                 only shops with a visible code
+      q=text                      name or address contains the text
+    With no filters it returns every shop (older cached clients use that).
+    """
     user_id = get_or_set_user_id()
-    print(f"API Call: /api/coffee_shops - IP: {request.remote_addr}, User ID Cookie: {user_id}")
-    coffee_shops = CoffeeShop.query.all()
-    response = jsonify([shop.to_dict(user_id=user_id) for shop in coffee_shops])
-    response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
-    return response
+    query = shops_query()
+
+    raw_bbox = request.args.get('bbox')
+    if raw_bbox is not None:
+        bbox = parse_bbox(raw_bbox)
+        if bbox is None:
+            return jsonify({"error": "bbox must be south,west,north,east"}), 400
+        south, west, north, east = bbox
+        query = query.filter(CoffeeShop.lat.between(south, north),
+                             CoffeeShop.lng.between(west, east))
+
+    if request.args.get('has_codes') == '1':
+        query = query.filter(has_codes_clause())
+
+    q = (request.args.get('q') or '').strip()
+    if q:
+        like = f"%{q}%"
+        query = query.filter(or_(CoffeeShop.name.ilike(like), CoffeeShop.address.ilike(like)))
+
+    if raw_bbox is not None or q:
+        query = query.limit(MAX_SHOPS_PER_QUERY)
+
+    return shop_response(query.all(), user_id)
 
 @app.route('/api/coffee_shops/<int:shop_id>', methods=['GET'])
 def get_coffee_shop(shop_id):
     user_id = get_or_set_user_id()
-    print(f"API Call: /api/coffee_shops/{shop_id} - IP: {request.remote_addr}, User ID Cookie: {user_id}")
-    shop = CoffeeShop.query.get(shop_id)
+    shop = db.session.get(CoffeeShop, shop_id)
     if not shop:
         return jsonify({"error": "Shop not found"}), 404
-    response = jsonify(shop.to_dict(user_id=user_id))
+    response = jsonify(shop.to_dict(votes=user_votes_for(user_id, [shop])))
     response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
     return response
 
@@ -229,7 +320,7 @@ def service_worker():
 # ---------------------------------------------------------------------------
 
 def _shop_or_404(shop_id):
-    shop = CoffeeShop.query.get(shop_id)
+    shop = db.session.get(CoffeeShop, shop_id)
     if not shop:
         abort(404)
     return shop
@@ -238,7 +329,7 @@ def _shop_or_404(shop_id):
 @app.route('/shops')
 def shops_directory():
     """Server-rendered, crawlable directory of every shop that has a code."""
-    shops = [s for s in CoffeeShop.query.order_by(CoffeeShop.name).all() if s.has_codes()]
+    shops = shops_query().filter(has_codes_clause()).order_by(CoffeeShop.name).all()
     return render_template('shops.html', shops=shops, canonical=site_url('/shops'))
 
 
@@ -336,11 +427,11 @@ def api_lookup():
     if not q:
         return jsonify({"error": "Provide a ?q= shop name or address fragment."}), 400
 
-    matches = [
-        s for s in CoffeeShop.query.all()
-        if q in s.name.lower() or (s.address and q in s.address.lower())
-    ]
-    matches = [s for s in matches if s.has_codes()][:20]
+    like = f"%{q}%"
+    matches = (shops_query()
+               .filter(or_(CoffeeShop.name.ilike(like), CoffeeShop.address.ilike(like)))
+               .filter(has_codes_clause())
+               .limit(20).all())
 
     results = []
     for s in matches:
@@ -394,9 +485,8 @@ def robots_txt():
 @app.route('/sitemap.xml')
 def sitemap_xml():
     urls = [site_url('/'), site_url('/shops')]
-    for s in CoffeeShop.query.order_by(CoffeeShop.id).all():
-        if s.has_codes():
-            urls.append(site_url(url_for('shop_detail', shop_id=s.id, slug=s.slug)))
+    for s in CoffeeShop.query.filter(has_codes_clause()).order_by(CoffeeShop.id).all():
+        urls.append(site_url(url_for('shop_detail', shop_id=s.id, slug=s.slug)))
 
     body = ['<?xml version="1.0" encoding="UTF-8"?>',
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
@@ -410,7 +500,7 @@ def sitemap_xml():
 def llms_txt():
     """The /llms.txt convention: a concise, Markdown guide for LLMs."""
     base = site_url('')
-    n_with_codes = sum(1 for s in CoffeeShop.query.all() if s.has_codes())
+    n_with_codes = CoffeeShop.query.filter(has_codes_clause()).count()
     content = f"""# {SITE_NAME}
 
 > {SITE_TAGLINE}.
@@ -452,15 +542,18 @@ at `{base}/shop/<id>` and mention that the value is crowdsourced and may change.
 
 @app.route('/api/vote', methods=['POST'])
 def vote():
-    data = request.get_json()
-    shop_id = data['shop_id']
-    item_type = data['item_type']
-    vote_type = data['vote_type'] # This is the new vote being cast
+    data = request.get_json(silent=True) or {}
+    shop_id = data.get('shop_id')
+    item_type = data.get('item_type')
+    vote_type = data.get('vote_type')  # This is the new vote being cast
     item_id = data.get('item_id')
+    if vote_type not in ('upvote', 'downvote') or not isinstance(item_id, int) \
+            or not isinstance(shop_id, int):
+        return jsonify({"error": "Invalid vote."}), 400
 
     user_id = get_or_set_user_id()
 
-    shop = CoffeeShop.query.get(shop_id)
+    shop = db.session.get(CoffeeShop, shop_id)
     if not shop:
         return jsonify({"error": "Shop not found"}), 404
 
@@ -473,8 +566,8 @@ def vote():
     else:
         return jsonify({"error": "Invalid item type"}), 400
     
-    found_item = Model.query.get(item_id)
-    if not found_item:
+    found_item = db.session.get(Model, item_id)
+    if not found_item or found_item.coffee_shop_id != shop_id:
         return jsonify({"error": "Item not found"}), 404
 
     existing_vote = Vote.query.filter_by(user_id=user_id, item_id=item_id, item_type=item_type_str).first()
@@ -506,20 +599,22 @@ def vote():
     db.session.commit()
     db.session.refresh(shop)
 
-    response = jsonify(shop.to_dict(user_id=user_id))
+    response = jsonify(shop.to_dict(votes=user_votes_for(user_id, [shop])))
     response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
     return response
 
 @app.route('/api/suggest', methods=['POST'])
 def suggest():
-    data = request.get_json()
-    shop_id = data['shop_id']
-    item_type = data['item_type']
-    item_value = data['item_value']
-    
+    data = request.get_json(silent=True) or {}
+    shop_id = data.get('shop_id')
+    item_type = data.get('item_type')
+    item_value = data.get('item_value')
+    if not isinstance(shop_id, int) or not isinstance(item_value, str) or not item_value:
+        return jsonify({"error": "Invalid suggestion."}), 400
+
     user_id = get_or_set_user_id()
 
-    shop = CoffeeShop.query.get(shop_id)
+    shop = db.session.get(CoffeeShop, shop_id)
     if not shop:
         return jsonify({"error": "Shop not found"}), 404
 
@@ -544,7 +639,7 @@ def suggest():
     else:
         return jsonify({"error": "Invalid item type"}), 400
 
-    if existing_item and existing_item.votes > -3:
+    if existing_item and existing_item.votes > HIDE_AT_VOTES:
         return jsonify({"error": "This suggestion is already active or has too many downvotes."}), 409
 
     if existing_item:
@@ -570,12 +665,27 @@ def suggest():
     db.session.refresh(shop)
 
     response_data = {
-        "shop": shop.to_dict(user_id=user_id),
+        "shop": shop.to_dict(votes=user_votes_for(user_id, [shop])),
         "newItemId": new_item.id
     }
     response = jsonify(response_data)
     response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
     return response
+
+def ensure_schema():
+    """Create missing tables (write_event) and the indexes the map queries use.
+    Existing tables are left as they are."""
+    db.create_all()
+    db.session.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_coffee_shop_lat_lng ON coffee_shop (lat, lng)'))
+    db.session.execute(text(
+        'CREATE INDEX IF NOT EXISTS ix_vote_user_shop ON vote (user_id, shop_id)'))
+    db.session.commit()
+
+
+with app.app_context():
+    ensure_schema()
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
