@@ -130,7 +130,17 @@ function codeRow(shop, itemType, item) {
     const down = item.user_vote === 'downvote' ? 'voted-down' : '';
     const fresh = item.last_confirmed_at
         ? `<span class="code-fresh">worked ${timeAgo(item.last_confirmed_at)}</span>` : '';
-    return `
+    let network = '';
+    if (itemType === 'wifi_passwords') {
+        network = item.ssid
+            ? `<div class="ssid-line">📶 Network <b>${escapeHtml(item.ssid)}</b></div>`
+            : `<button class="link-btn ssid-add" data-action="show-ssid" data-item="${item.id}">+ Add network name</button>
+               <div class="ssid-form" id="ssid-form-${item.id}" hidden>
+                   <input type="text" id="ssid-input-${item.id}" maxlength="32" placeholder="Network name (SSID)">
+                   <button class="suggest-btn" data-action="save-ssid" ${ids}>Save</button>
+               </div>`;
+    }
+    return network + `
         <div class="popup-row">
             <code class="${itemType === 'wifi_passwords' ? 'popup-password' : 'popup-code'}">${escapeHtml(value)}</code>
             <button class="copy-button" aria-label="Copy" data-action="copy" data-value="${escapeHtml(value)}" ${ids}>📋</button>
@@ -156,6 +166,9 @@ function codeSection(shop, itemType, title) {
     const attrs = itemType === 'bathroom_codes'
         ? `placeholder="New code (digits, *, #)" inputmode="tel" maxlength="12" data-filter="code"`
         : `placeholder="New password" maxlength="16"`;
+    if (itemType === 'wifi_passwords') {
+        html += `<input type="text" class="ssid-new" id="${inputId}-ssid" maxlength="32" placeholder="Network name (optional)">`;
+    }
     html += `
         <div class="suggestion-form">
             <input type="text" id="${inputId}" ${attrs}>
@@ -226,6 +239,14 @@ document.addEventListener('click', function (event) {
             break;
         case 'speedtest':
             runSpeedTest(shopId);
+            break;
+        case 'show-ssid':
+            el.hidden = true;
+            document.getElementById(`ssid-form-${itemId}`).hidden = false;
+            document.getElementById(`ssid-input-${itemId}`).focus();
+            break;
+        case 'save-ssid':
+            saveSsid(shopId, itemId);
             break;
     }
 });
@@ -578,6 +599,22 @@ const SPEED_PROMPT_MAX_MS = 30 * 60 * 1000;  // the offer expires
 const SPEED_MAX_DISTANCE_M = 200;            // same limit as the server
 let speedTestRunning = false;
 
+// navigator.connection exists on Android Chrome. Safari and Firefox do not
+// have it, so there the server filters cellular tests by network instead.
+const CELLULAR_TYPES = ['cellular', 'bluetooth', 'wimax', 'none'];
+function connectionType() {
+    return (navigator.connection && navigator.connection.type) || 'unknown';
+}
+function onCellular() {
+    return CELLULAR_TYPES.includes(connectionType());
+}
+
+// The shop's network name, if anyone added it.
+function shopSsid(shop) {
+    const wifi = (shop.wifi_passwords || []).find(w => w.ssid);
+    return wifi ? wifi.ssid : null;
+}
+
 function armSpeedPrompt(shopId) {
     writeJson(SPEED_PROMPT_KEY, { shopId, ts: Date.now() });
 }
@@ -590,13 +627,17 @@ function maybeOfferSpeedTest() {
     writeJson(SPEED_PROMPT_KEY, {});
     if (age > SPEED_PROMPT_MAX_MS) return;
     const shop = shopsById.get(pending.shopId);
-    if (shop) showSpeedCard(shop);
+    if (shop && !onCellular()) showSpeedCard(shop);
 }
 
 function showSpeedCard(shop) {
     const card = document.getElementById('speed-card');
+    const ssid = shopSsid(shop);
+    const network = ssid
+        ? `Connected to <b>${escapeHtml(ssid)}</b>?`
+        : `On the <b>${escapeHtml(shop.name)}</b> Wi-Fi now?`;
     card.querySelector('.speed-card-text').innerHTML =
-        `On the <b>${escapeHtml(shop.name)}</b> Wi-Fi now? Test its speed. It takes about 5 seconds.`;
+        `${network} Test its speed. It takes about 5 seconds.`;
     card.dataset.shop = shop.id;
     card.hidden = false;
 }
@@ -648,6 +689,12 @@ async function runSpeedTest(shopId) {
     if (!shop) return;
     hideSpeedCard();
 
+    if (onCellular()) {
+        const ssid = shopSsid(shop);
+        showToast(`You are on cellular data. Join ${ssid ? escapeHtml(ssid) : 'the shop\'s Wi-Fi'} first.`);
+        return;
+    }
+
     let here;
     try {
         here = await currentPosition();
@@ -667,7 +714,8 @@ async function runSpeedTest(shopId) {
         const res = await fetch(`${API_BASE_URL}/api/speedtest`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ shop_id: shopId, mbps, ping_ms, lat: here.lat, lng: here.lng }),
+            body: JSON.stringify({ shop_id: shopId, mbps, ping_ms, lat: here.lat, lng: here.lng,
+                                   connection: connectionType() }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
@@ -685,6 +733,12 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') maybeOfferSpeedTest();
 });
 window.addEventListener('online', maybeOfferSpeedTest);
+// Android Chrome: offer the test the moment the phone joins a Wi-Fi network.
+if (navigator.connection && navigator.connection.addEventListener) {
+    navigator.connection.addEventListener('change', () => {
+        if (connectionType() === 'wifi') maybeOfferSpeedTest();
+    });
+}
 
 function showToast(message) {
     var toast = document.getElementById("toast");
@@ -741,10 +795,13 @@ function suggest(shopId, itemType, inputId) {
         showToast('Please enter a value.');
         return;
     }
+    const ssidInput = document.getElementById(`${inputId}-ssid`);
+    const body = { shop_id: shopId, item_type: itemType, item_value: itemValue };
+    if (ssidInput && ssidInput.value.trim()) body.ssid = ssidInput.value.trim();
     fetch(`${API_BASE_URL}/api/suggest`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shop_id: shopId, item_type: itemType, item_value: itemValue })
+        body: JSON.stringify(body)
     }).then(response => {
         if (response.ok) return response.json();
         response.json().then(data => showToast('Error: ' + data.error));
@@ -754,9 +811,29 @@ function suggest(shopId, itemType, inputId) {
             rememberShops([data.shop]);
             refreshMarker(shopId);
             document.getElementById(inputId).value = '';
+            if (ssidInput) ssidInput.value = '';
             showToast('Added. Thanks!');
         }
     });
+}
+
+function saveSsid(shopId, itemId) {
+    const ssid = document.getElementById(`ssid-input-${itemId}`).value.trim();
+    if (!ssid) {
+        showToast('Please enter the network name.');
+        return;
+    }
+    fetch(`${API_BASE_URL}/api/wifi_ssid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop_id: shopId, item_id: itemId, ssid })
+    }).then(r => r.json().then(data => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+          if (!ok) { showToast('Error: ' + data.error); return; }
+          rememberShops([data]);
+          refreshMarker(shopId);
+          showToast('Network name saved. Thanks!');
+      });
 }
 
 function refreshMarker(shopId) {

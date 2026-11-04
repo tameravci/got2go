@@ -5,6 +5,7 @@ from flask import (
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
+import hashlib
 import json
 import os
 import re
@@ -245,6 +246,8 @@ class WifiPassword(db.Model):
     password = db.Column(db.String(100), nullable=False)
     votes = db.Column(db.Integer, default=1)
     coffee_shop_id = db.Column(db.Integer, db.ForeignKey('coffee_shop.id'), nullable=False)
+    # The network name. Optional: older passwords have none.
+    ssid = db.Column(db.String(32))
     created_at = db.Column(db.DateTime)
     # Set when the code is added and on each upvote ("it worked").
     last_confirmed_at = db.Column(db.DateTime)
@@ -256,6 +259,7 @@ class WifiPassword(db.Model):
         return {
             'id': self.id,
             'password': self.password,
+            'ssid': self.ssid,
             'votes': self.votes,
             'created_at': iso(self.created_at),
             'last_confirmed_at': iso(self.last_confirmed_at),
@@ -314,12 +318,37 @@ class SpeedTest(db.Model):
     mbps = db.Column(db.Float, nullable=False)
     ping_ms = db.Column(db.Float)
     created_at = db.Column(db.DateTime, nullable=False)
+    # Salted hash of the visitor's public IP. Visitors on the same cafe
+    # Wi-Fi share one public IP; a test over cellular comes from another.
+    ip_hash = db.Column(db.String(16))
+
+
+def hash_ip(ip):
+    salt = app.config.get('SECRET_KEY') or 'got2go'
+    return hashlib.sha256(f'{salt}:{ip}'.encode()).hexdigest()[:16]
+
+
+def same_network_tests(tests):
+    """Keep only tests from the most common network, once two or more
+    tests share one. This drops tests that ran over cellular data, which
+    the browser cannot always detect (for example on iPhones)."""
+    counts = {}
+    for t in tests:
+        if t.ip_hash:
+            counts[t.ip_hash] = counts.get(t.ip_hash, 0) + 1
+    if not counts:
+        return tests
+    top, n = max(counts.items(), key=lambda kv: kv[1])
+    return [t for t in tests if t.ip_hash == top] if n >= 2 else tests
 
 
 SPEED_WINDOW_DAYS = 180   # ignore older tests
 SPEED_MAX_TESTS = 10      # median of the newest N tests
 SPEED_MAX_DISTANCE_M = 200  # the visitor must be this close to the shop
 SPEED_TEST_MAX_MB = 5
+# navigator.connection.type values that mean "not on Wi-Fi".
+CELLULAR_TYPES = {'cellular', 'bluetooth', 'wimax', 'none'}
+SSID_MAX = 32
 
 
 def speed_summaries(shop_ids):
@@ -335,7 +364,7 @@ def speed_summaries(shop_ids):
         grouped.setdefault(row.shop_id, []).append(row)
     out = {}
     for shop_id, tests in grouped.items():
-        tests = tests[:SPEED_MAX_TESTS]
+        tests = same_network_tests(tests[:SPEED_MAX_TESTS])
         pings = [t.ping_ms for t in tests if t.ping_ms is not None]
         out[shop_id] = {
             'mbps': round(statistics.median(t.mbps for t in tests), 1),
@@ -627,7 +656,8 @@ def _shop_plaintext(shop):
         lines.append("  none reported yet")
     lines += ["", "Wi-Fi passwords (most upvoted first):"]
     if wifi:
-        lines += [f"  {i}. {wp.password}  (votes: {wp.votes})" for i, wp in enumerate(wifi, 1)]
+        lines += [f"  {i}. {wp.password}" + (f"  (network: {wp.ssid})" if wp.ssid else "")
+                  + f"  (votes: {wp.votes})" for i, wp in enumerate(wifi, 1)]
     else:
         lines.append("  none reported yet")
     lines += [
@@ -848,8 +878,12 @@ def suggest():
     shop_id = data.get('shop_id')
     item_type = data.get('item_type')
     item_value = data.get('item_value')
+    ssid = data.get('ssid')
     if not isinstance(shop_id, int) or not isinstance(item_value, str) or not item_value:
         return jsonify({"error": "Invalid suggestion."}), 400
+    ssid = ssid.strip() if isinstance(ssid, str) else ''
+    if len(ssid) > SSID_MAX:
+        return jsonify({"error": f"Network name cannot be longer than {SSID_MAX} characters."}), 400
 
     user_id = get_or_set_user_id()
 
@@ -879,6 +913,12 @@ def suggest():
         return jsonify({"error": "Invalid item type"}), 400
 
     if existing_item and existing_item.votes > HIDE_AT_VOTES:
+        # The password is already listed. Accept a network name it lacks.
+        if item_type == 'wifi_passwords' and ssid and not existing_item.ssid:
+            existing_item.ssid = ssid
+            db.session.commit()
+            return jsonify({"shop": shop.to_dict(votes=user_votes_for(user_id, [shop])),
+                            "newItemId": existing_item.id})
         return jsonify({"error": "This suggestion is already active or has too many downvotes."}), 409
 
     now = utcnow()
@@ -892,6 +932,8 @@ def suggest():
             new_item = Model(code=item_value, coffee_shop=shop, votes=0)
         new_item.created_at = now
         db.session.add(new_item)
+    if item_type == 'wifi_passwords' and ssid:
+        new_item.ssid = ssid
     new_item.last_confirmed_at = now
     
     db.session.commit()
@@ -913,6 +955,28 @@ def suggest():
     response = jsonify(response_data)
     response.set_cookie('user_id', user_id, max_age=60*60*24*365*5) # 5 years
     return response
+
+@app.route('/api/wifi_ssid', methods=['POST'])
+def set_wifi_ssid():
+    """Add the network name to a listed password that has none yet."""
+    data = request.get_json(silent=True) or {}
+    shop_id, item_id, ssid = data.get('shop_id'), data.get('item_id'), data.get('ssid')
+    ssid = ssid.strip() if isinstance(ssid, str) else ''
+    if not isinstance(shop_id, int) or not isinstance(item_id, int) or not 0 < len(ssid) <= SSID_MAX:
+        return jsonify({"error": f"Enter a network name of 1 to {SSID_MAX} characters."}), 400
+    item = db.session.get(WifiPassword, item_id)
+    if not item or item.coffee_shop_id != shop_id:
+        return jsonify({"error": "Item not found"}), 404
+    if item.ssid:
+        return jsonify({"error": "This password already has a network name."}), 409
+    item.ssid = ssid
+    db.session.commit()
+    user_id = get_or_set_user_id()
+    shop = db.session.get(CoffeeShop, shop_id)
+    response = jsonify(shop.to_dict(votes=user_votes_for(user_id, [shop])))
+    response.set_cookie('user_id', user_id, max_age=60*60*24*365*5)
+    return response
+
 
 @app.route('/api/ping')
 def api_ping():
@@ -961,7 +1025,11 @@ def speedtest_result():
     if recent:
         return jsonify({"error": "You tested this shop in the last hour. Thanks!"}), 409
 
+    if data.get('connection') in CELLULAR_TYPES:
+        return jsonify({"error": "Join the cafe's Wi-Fi first. This test does not run on cellular data."}), 400
+
     db.session.add(SpeedTest(shop_id=shop_id, user_id=user_id, mbps=float(mbps),
+                             ip_hash=hash_ip(request.remote_addr or ''),
                              ping_ms=float(ping_ms) if ping_ms is not None else None,
                              created_at=utcnow()))
     db.session.commit()
@@ -979,7 +1047,9 @@ ADDED_COLUMNS = {
         ('osm_seen_at', 'DATETIME'),
         ('tags_json', 'TEXT'),
     ],
-    'wifi_password': [('created_at', 'DATETIME'), ('last_confirmed_at', 'DATETIME')],
+    'wifi_password': [('created_at', 'DATETIME'), ('last_confirmed_at', 'DATETIME'),
+                      ('ssid', 'VARCHAR(32)')],
+    'speed_test': [('ip_hash', 'VARCHAR(16)')],
     'bathroom_code': [('created_at', 'DATETIME'), ('last_confirmed_at', 'DATETIME')],
 }
 

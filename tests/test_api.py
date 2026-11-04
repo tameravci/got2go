@@ -271,3 +271,45 @@ def test_osm_sync_refuses_tiny_response(client):
             db.session.get(CoffeeShop, i).osm_id = f'node/{i}'
         db.session.commit()
         assert populate_db.sync([]) == 1
+
+
+# ---- Network name (SSID) -------------------------------------------------
+
+def test_suggest_with_ssid(client):
+    r = client.post('/api/suggest', json={'shop_id': 2, 'item_type': 'wifi_passwords',
+                                          'item_value': 'pw123', 'ssid': ' EmptyGuest '})
+    assert r.get_json()['shop']['wifi_passwords'][0]['ssid'] == 'EmptyGuest'
+
+
+def test_suggest_existing_password_adds_missing_ssid(client):
+    r = client.post('/api/suggest', json={'shop_id': 1, 'item_type': 'wifi_passwords',
+                                          'item_value': 'coffee123', 'ssid': 'VictrolaGuest'})
+    assert r.status_code == 200
+    assert r.get_json()['shop']['wifi_passwords'][0]['ssid'] == 'VictrolaGuest'
+
+
+def test_set_ssid_once(client):
+    r = client.post('/api/wifi_ssid', json={'shop_id': 1, 'item_id': 10, 'ssid': 'VictrolaGuest'})
+    assert r.status_code == 200 and r.get_json()['wifi_passwords'][0]['ssid'] == 'VictrolaGuest'
+    r = client.post('/api/wifi_ssid', json={'shop_id': 1, 'item_id': 10, 'ssid': 'Other'})
+    assert r.status_code == 409
+    assert client.post('/api/wifi_ssid', json={'shop_id': 2, 'item_id': 10, 'ssid': 'X'}).status_code == 404
+    assert client.post('/api/wifi_ssid', json={'shop_id': 1, 'item_id': 10, 'ssid': 'x' * 33}).status_code == 400
+
+
+# ---- Cellular filtering ----------------------------------------------------
+
+def test_speed_test_rejects_cellular(client):
+    assert speed(client, connection='cellular').status_code == 400
+    assert speed(client, connection='wifi').status_code == 200
+
+
+def test_speed_summary_keeps_most_common_network(client):
+    from app import SpeedTest, utcnow, speed_summaries
+    with app.app_context():
+        for i, (mbps, ip) in enumerate([(50, 'cafe'), (55, 'cafe'), (60, 'cafe'), (300, 'lte')]):
+            db.session.add(SpeedTest(shop_id=1, user_id=f'u{i}', mbps=mbps,
+                                     created_at=utcnow(), ip_hash=ip))
+        db.session.commit()
+        summary = speed_summaries([1])[1]
+        assert (summary['mbps'], summary['tests']) == (55, 3)

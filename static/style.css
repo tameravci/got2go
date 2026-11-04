@@ -836,3 +836,21 @@ a.shop-list-item { color: inherit; text-decoration: none; }
 #speed-card[hidden] { display: none; }
 #speed-card p { margin: 0 0 10px; font-size: 0.92rem; }
 .speed-card-actions { display: flex; align-items: center; gap: 12px; }
+
+/* Wi-Fi network name (SSID) */
+.ssid-line { font-size: 0.82rem; color: var(--text-muted); margin: 2px 0 2px; }
+.ssid-line b { color: var(--text); font-family: var(--font-mono); }
+.leaflet-popup-content button.ssid-add { font-size: 0.78rem; padding: 0 0 2px; }
+.ssid-form { display: flex; gap: 6px; margin: 2px 0 6px; }
+.ssid-form[hidden] { display: none; }
+.ssid-form input, input.ssid-new {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    font-size: 0.88rem;
+}
+input.ssid-new { display: block; width: 100%; box-sizing: border-box; margin: 8px 0 0; }
+/* Keep the copy and vote buttons on the same line as a long code. */
+.popup-row .popup-code, .popup-row .popup-password { flex: 1 1 0; min-width: 0; }

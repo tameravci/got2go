@@ -109,6 +109,7 @@ Public restroom at {{ shop.name }} in {{ place }}{% if features %}: {{ features 
             {% for wp in wifi %}
             <li>
                 {% if loop.first %}<span class="top">Top</span>{% endif %}
+                {% if wp.ssid %}<span>Network <strong>{{ wp.ssid }}</strong></span>{% endif %}
                 <code>{{ wp.password }}</code>
                 {% if wp.last_confirmed_at %}<span class="muted">worked {{ wp.last_confirmed_at | ago }}</span>{% endif %}
                 <span class="votes">{{ wp.votes }} vote{{ '' if wp.votes == 1 else 's' }}</span>
