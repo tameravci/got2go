@@ -135,8 +135,8 @@ function codeRow(shop, itemType, item) {
             <code class="${itemType === 'wifi_passwords' ? 'popup-password' : 'popup-code'}">${escapeHtml(value)}</code>
             <button class="copy-button" aria-label="Copy" data-action="copy" data-value="${escapeHtml(value)}" ${ids}>📋</button>
             <span class="vote-count" title="votes">${item.votes}</span>
-            <button class="vote-btn ${up}" data-action="vote" data-vote="upvote" ${ids}>✓ Worked</button>
-            <button class="vote-btn ${down}" data-action="vote" data-vote="downvote" ${ids}>✗ Didn't</button>
+            <button class="vote-btn ${up}" aria-label="It worked" title="It worked" data-action="vote" data-vote="upvote" ${ids}>👍</button>
+            <button class="vote-btn ${down}" aria-label="It didn't work" title="It didn't work" data-action="vote" data-vote="downvote" ${ids}>👎</button>
             ${fresh}
         </div>`;
 }

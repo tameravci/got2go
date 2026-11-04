@@ -777,7 +777,7 @@ a.shop-list-item { color: inherit; text-decoration: none; }
     color: var(--success);
     margin-top: -2px;
 }
-.popup-row .vote-btn { font-size: 0.78rem; padding: 3px 6px; }
+.popup-row .vote-btn { padding: 3px 7px; }
 .popup-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
 .popup-chips span {
     font-size: 0.75rem;
