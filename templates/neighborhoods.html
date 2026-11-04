@@ -1,0 +1,26 @@
+{% extends "_page.html" %}
+{% block title %}Seattle bathroom codes & Wi-Fi passwords by neighborhood | {{ site_name }}{% endblock %}
+{% block description %}Find crowdsourced bathroom codes, coffee shop Wi-Fi passwords and public restrooms in {{ hoods|length }} Seattle neighborhoods, from Capitol Hill to Ballard.{% endblock %}
+
+{% block head %}
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Seattle bathroom codes & Wi-Fi passwords by neighborhood">
+{% endblock %}
+
+{% block body %}
+    <header class="crumbs">
+        <a href="{{ url_for('index') }}">{{ site_name }}</a> &rsaquo; <span>Seattle</span>
+    </header>
+    <main>
+        <h1>Seattle bathroom codes &amp; Wi-Fi passwords by neighborhood</h1>
+        <p class="muted">Pick a neighborhood to see its coffee shop codes and public restrooms.</p>
+        <ul class="hoods">
+            {% for h in hoods %}
+            <li><a href="{{ url_for('neighborhood_detail', slug=h.slug) }}">{{ h.name }}</a>
+                <span class="muted">({{ h.count }})</span></li>
+            {% endfor %}
+        </ul>
+        <p><a href="{{ url_for('shops_directory') }}">All shops A to Z</a> &middot;
+           <a href="{{ url_for('index') }}">Map</a></p>
+    </main>
+{% endblock %}

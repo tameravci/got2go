@@ -1,25 +1,34 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {% set wifi_summary = (wifi[0].password if wifi else None) %}
-    {% set bath_summary = (bathroom[0].code if bathroom else None) %}
-    <title>{{ shop.name }} - Wi-Fi password & bathroom code | {{ site_name }}</title>
-    <meta name="description" content="{{ shop.name }} ({{ shop.address }}): crowdsourced Wi-Fi password{% if wifi_summary %} ({{ wifi_summary }}){% endif %} and bathroom code{% if bath_summary %} ({{ bath_summary }}){% endif %} for this Seattle spot, community-voted and kept up to date by {{ site_name }}.">
-    <link rel="canonical" href="{{ canonical }}">
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
+{% extends "_page.html" %}
+{% set wifi_summary = (wifi[0].password if wifi else None) %}
+{% set bath_summary = (bathroom[0].code if bathroom else None) %}
+{% set place = (hood.name ~ ', Seattle') if hood else 'Seattle' %}
+{% set features = feature_labels(shop.tags) %}
+{% if shop.is_restroom %}
+  {% if shop.name.startswith('Public restroom') %}
+    {% set heading = shop.name ~ ' (' ~ place ~ ')' %}
+  {% else %}
+    {% set heading = shop.name ~ ' (' ~ place ~ '): public restroom' %}
+  {% endif %}
+{% else %}
+  {% set heading = shop.name ~ ' Wi-Fi password & bathroom code (' ~ place ~ ')' %}
+{% endif %}
 
+{% block title %}{{ heading }} | {{ site_name }}{% endblock %}
+
+{% block description -%}
+{% if shop.is_restroom -%}
+Public restroom at {{ shop.name }} in {{ place }}{% if features %}: {{ features | join(', ') | lower }}{% endif %}{% if shop.tags.opening_hours %}. Hours: {{ shop.tags.opening_hours }}{% endif %}. Find more restrooms on {{ site_name }}.
+{%- else -%}
+{{ shop.name }} ({{ shop.address }}): crowdsourced Wi-Fi password{% if wifi_summary %} ({{ wifi_summary }}){% endif %} and bathroom code{% if bath_summary %} ({{ bath_summary }}){% endif %}{% if last_confirmed %}, last confirmed {{ last_confirmed | ago }}{% endif %}. Community-voted on {{ site_name }}.
+{%- endif %}
+{%- endblock %}
+
+{% block head %}
     <meta property="og:type" content="article">
-    <meta property="og:site_name" content="{{ site_name }}">
-    <meta property="og:title" content="{{ shop.name }} - Wi-Fi password & bathroom code">
-    <meta property="og:description" content="Crowdsourced Wi-Fi password and bathroom code for {{ shop.name }} in Seattle. Community-voted on {{ site_name }}.">
-    <meta property="og:url" content="{{ canonical }}">
-    <meta property="og:image" content="{{ url_for('static', filename='logo-toilet.png', _external=True) }}">
-    <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="{{ shop.name }} - Wi-Fi & bathroom code">
-    <meta name="twitter:description" content="Crowdsourced Wi-Fi password and bathroom code for {{ shop.name }} in Seattle.">
-
+    <meta property="og:title" content="{{ heading }}">
+    <meta property="og:description" content="{{ self.description() }}">
+    <meta name="twitter:title" content="{{ heading }}">
+    <meta name="twitter:description" content="{{ self.description() }}">
     <script type="application/ld+json">
     {{ jsonld | tojson | safe }}
     </script>
@@ -28,46 +37,49 @@
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       "itemListElement": [
-        {"@type": "ListItem", "position": 1, "name": "{{ site_name }}", "item": "{{ url_for('index', _external=True) }}"},
-        {"@type": "ListItem", "position": 2, "name": "Shops", "item": "{{ url_for('shops_directory', _external=True) }}"},
+        {"@type": "ListItem", "position": 1, "name": "{{ site_name }}", "item": "{{ abs_url('index') }}"},
+        {% if hood %}
+        {"@type": "ListItem", "position": 2, "name": {{ hood.name | tojson }}, "item": "{{ abs_url('neighborhood_detail', slug=hood.slug) }}"},
+        {% else %}
+        {"@type": "ListItem", "position": 2, "name": "Shops", "item": "{{ abs_url('shops_directory') }}"},
+        {% endif %}
         {"@type": "ListItem", "position": 3, "name": {{ shop.name | tojson }}, "item": {{ canonical | tojson }}}
       ]
     }
     </script>
+{% endblock %}
 
-    <style>
-        :root { color-scheme: light dark; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-               max-width: 720px; margin: 0 auto; padding: 1rem 1.25rem 4rem; line-height: 1.55; }
-        header.crumbs { font-size: .9rem; margin-bottom: 1rem; }
-        header.crumbs a { color: #0a66c2; text-decoration: none; }
-        h1 { margin-bottom: .25rem; }
-        .addr { color: #666; margin-top: 0; }
-        h2 { margin-top: 2rem; border-bottom: 1px solid #ddd; padding-bottom: .25rem; }
-        ul.codes { list-style: none; padding: 0; }
-        ul.codes li { display: flex; align-items: baseline; gap: .75rem;
-                      padding: .5rem .75rem; border: 1px solid #e3e3e3; border-radius: 8px; margin-bottom: .5rem; }
-        ul.codes code { font-size: 1.15rem; font-weight: 600; }
-        .votes { color: #888; font-size: .85rem; margin-left: auto; }
-        .top { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
-               background: #0a66c2; color: #fff; border-radius: 4px; padding: .1rem .4rem; }
-        .note { font-size: .85rem; color: #777; margin-top: 2rem; }
-        .cta a { color: #0a66c2; }
-    </style>
-</head>
-<body>
+{% block body %}
     <header class="crumbs">
         <a href="{{ url_for('index') }}">{{ site_name }}</a> &rsaquo;
+        {% if hood %}
+        <a href="{{ url_for('neighborhood_detail', slug=hood.slug) }}">{{ hood.name }}</a> &rsaquo;
+        {% else %}
         <a href="{{ url_for('shops_directory') }}">Shops</a> &rsaquo;
+        {% endif %}
         <span>{{ shop.name }}</span>
     </header>
 
     <main>
-        <h1>{{ shop.name }}</h1>
+        <h1>{{ heading }}</h1>
         <p class="addr">{{ shop.address }}</p>
-        <p>Crowdsourced Wi-Fi passwords and bathroom codes for <strong>{{ shop.name }}</strong>,
-           a coffee shop in Seattle, WA. Entries are community-voted on {{ site_name }};
-           the most-upvoted (most recently confirmed) appears first.</p>
+
+        {% if features or shop.tags.opening_hours %}
+        <ul class="chips">
+            {% for f in features %}<li>{{ f }}</li>{% endfor %}
+            {% if shop.tags.opening_hours %}<li>Hours: {{ shop.tags.opening_hours }}</li>{% endif %}
+        </ul>
+        {% endif %}
+
+        {% if shop.is_restroom %}
+        <p>{{ shop.name }} is a public restroom in {{ place }}. The location and details
+           come from OpenStreetMap. If the restroom has a door code, the community adds it below.</p>
+        {% else %}
+        <p>Crowdsourced Wi-Fi passwords and bathroom codes for <strong>{{ shop.name }}</strong>
+           in {{ place }}. People on {{ site_name }} vote on each entry. The entry that most
+           people confirmed is first.
+           {% if last_confirmed %}Someone last confirmed a code here {{ last_confirmed | ago }}.{% endif %}</p>
+        {% endif %}
 
         <h2>Bathroom codes</h2>
         {% if bathroom %}
@@ -76,6 +88,7 @@
             <li>
                 {% if loop.first %}<span class="top">Top</span>{% endif %}
                 <code>{{ bc.code }}</code>
+                {% if bc.last_confirmed_at %}<span class="muted">worked {{ bc.last_confirmed_at | ago }}</span>{% endif %}
                 <span class="votes">{{ bc.votes }} vote{{ '' if bc.votes == 1 else 's' }}</span>
             </li>
             {% endfor %}
@@ -84,13 +97,20 @@
         <p>No bathroom code reported yet.</p>
         {% endif %}
 
+        {% if not shop.is_restroom %}
         <h2>Wi-Fi passwords</h2>
+        {% if speed %}
+        <p><strong>Wi-Fi speed: about {{ speed.mbps }} Mbps</strong>
+           <span class="muted">(median of {{ speed.tests }} test{{ '' if speed.tests == 1 else 's' }}
+           by visitors{% if speed.ping_ms %}, {{ speed.ping_ms }} ms ping{% endif %})</span></p>
+        {% endif %}
         {% if wifi %}
         <ul class="codes">
             {% for wp in wifi %}
             <li>
                 {% if loop.first %}<span class="top">Top</span>{% endif %}
                 <code>{{ wp.password }}</code>
+                {% if wp.last_confirmed_at %}<span class="muted">worked {{ wp.last_confirmed_at | ago }}</span>{% endif %}
                 <span class="votes">{{ wp.votes }} vote{{ '' if wp.votes == 1 else 's' }}</span>
             </li>
             {% endfor %}
@@ -98,15 +118,33 @@
         {% else %}
         <p>No Wi-Fi password reported yet.</p>
         {% endif %}
+        {% endif %}
 
-        <p class="cta">Vote on these codes or add a new one on the
+        <p>Vote on these codes or add a new one on the
            <a href="{{ url_for('index') }}">interactive map</a>.
            Machine-readable: <a href="{{ url_for('shop_detail_txt', shop_id=shop.id) }}">plain text</a> &middot;
            <a href="{{ url_for('get_coffee_shop', shop_id=shop.id) }}">JSON</a>.</p>
+
+        {% if nearby %}
+        <h2>More in {{ hood.name }}</h2>
+        <ul class="shops">
+            {% for s in nearby %}
+            <li>
+                <a href="{{ url_for('shop_detail', shop_id=s.id, slug=s.slug) }}">{{ s.name }}</a>
+                <span class="tags">
+                    {%- if s.is_restroom %} public restroom{% endif -%}
+                    {%- if s.active_bathroom() %} 🚻 bathroom code{% endif -%}
+                    {%- if s.active_wifi() %} 📶 Wi-Fi{% endif -%}
+                </span>
+                <span class="addr">{{ s.address }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        <p><a href="{{ url_for('neighborhood_detail', slug=hood.slug) }}">All codes and restrooms in {{ hood.name }}</a></p>
+        {% endif %}
 
         <p class="note">These codes are crowdsourced and community-voted. They change
            over time and may be out of date. Please use them respectfully and as a
            paying customer where that is expected.</p>
     </main>
-</body>
-</html>
+{% endblock %}

@@ -17,6 +17,7 @@
     --pin-wifi: #2563eb;
     --pin-bathroom: #f59e0b;
     --pin-empty: #9ca3af;
+    --pin-restroom: #7c3aed;
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
     --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
     --shadow-lg: 0 10px 30px rgba(0,0,0,0.12);
@@ -160,6 +161,7 @@ body {
 .dot-wifi { background: var(--pin-wifi); }
 .dot-bathroom { background: var(--pin-bathroom); }
 .dot-empty { background: var(--pin-empty); }
+.dot-restroom { background: var(--pin-restroom); }
 
 .modal-footer {
     display: flex;
@@ -490,6 +492,7 @@ body:not(.zoomed-in) #map-legend .legend-empty { display: none; }
 .pin-wifi svg path { fill: var(--pin-wifi); }
 .pin-bathroom svg path { fill: var(--pin-bathroom); }
 .pin-empty svg path { fill: var(--pin-empty); }
+.pin-restroom svg path { fill: var(--pin-restroom); }
 
 /* Cluster recoloring to match palette */
 .marker-cluster-small {
@@ -561,6 +564,7 @@ body:not(.zoomed-in) #map-legend .legend-empty { display: none; }
 }
 .popup-row {
     display: flex !important;
+    flex-wrap: wrap;
     align-items: center;
     margin-bottom: 6px !important;
     gap: 6px;
@@ -761,3 +765,74 @@ body:not(.zoomed-in) #map-legend .legend-empty { display: none; }
 @media (min-width: 769px) {
     .sidebar-toggle-header { display: none; }
 }
+
+/* Sidebar items are links now. */
+a.shop-list-item { color: inherit; text-decoration: none; }
+.count-restroom { background: rgba(124, 58, 237, 0.1); color: var(--pin-restroom); }
+
+/* Popup additions: freshness, chips, "did it work?", speed. */
+.code-fresh {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+    color: var(--success);
+    margin-top: -2px;
+}
+.popup-row .vote-btn { font-size: 0.78rem; padding: 3px 6px; }
+.popup-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
+.popup-chips span {
+    font-size: 0.75rem;
+    background: var(--surface-2);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+.did-it-work {
+    margin: 8px 0 4px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    background: var(--success-bg);
+    border: 1px solid var(--success);
+    font-size: 0.88rem;
+}
+.did-it-work div { display: flex; gap: 6px; margin-top: 6px; }
+.speed-badge {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--primary);
+}
+.speed-badge small { font-weight: 400; color: var(--text-muted); }
+.link-btn,
+.leaflet-popup-content button.link-btn {
+    border: none;
+    background: none;
+    padding: 4px 0;
+    color: var(--primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.link-btn:hover { text-decoration: underline; background: none; }
+.popup-page-link {
+    display: block;
+    margin-top: 10px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+/* Offer a speed test after the visitor comes back from joining the Wi-Fi. */
+#speed-card {
+    position: fixed;
+    left: 50%;
+    bottom: 72px;
+    transform: translateX(-50%);
+    width: min(420px, calc(100% - 32px));
+    z-index: 10000;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: 12px 14px;
+}
+#speed-card[hidden] { display: none; }
+#speed-card p { margin: 0 0 10px; font-size: 0.92rem; }
+.speed-card-actions { display: flex; align-items: center; gap: 12px; }

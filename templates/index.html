@@ -6,7 +6,7 @@
     <title>Got2GoSEA - Seattle coffee shop Wi-Fi passwords & bathroom codes</title>
     <meta name="description" content="{{ site_description }}">
     <meta name="keywords" content="Seattle coffee shop wifi password, Seattle bathroom code, cafe wifi Seattle, public restroom code Seattle, free wifi Seattle">
-    <link rel="canonical" href="{{ url_for('index', _external=True) }}">
+    <link rel="canonical" href="{{ canonical }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
     <meta name="theme-color" content="#2563eb">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -19,8 +19,8 @@
     <meta property="og:site_name" content="{{ site_name }}">
     <meta property="og:title" content="Got2GoSEA - Seattle Wi-Fi passwords & bathroom codes">
     <meta property="og:description" content="{{ site_tagline }}.">
-    <meta property="og:url" content="{{ url_for('index', _external=True) }}">
-    <meta property="og:image" content="{{ url_for('static', filename='logo-toilet.png', _external=True) }}">
+    <meta property="og:url" content="{{ abs_url('index') }}">
+    <meta property="og:image" content="{{ abs_url('static', filename='logo-toilet.png') }}">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="Got2GoSEA - Seattle Wi-Fi & bathroom codes">
     <meta name="twitter:description" content="{{ site_tagline }}.">
@@ -31,13 +31,13 @@
       "@type": "WebSite",
       "name": "{{ site_name }}",
       "alternateName": "Got 2 Go Seattle",
-      "url": "{{ url_for('index', _external=True) }}",
+      "url": "{{ abs_url('index') }}",
       "description": {{ site_description | tojson }},
       "potentialAction": {
         "@type": "SearchAction",
         "target": {
           "@type": "EntryPoint",
-          "urlTemplate": "{{ url_for('api_lookup', _external=True) }}?q={search_term_string}"
+          "urlTemplate": "{{ abs_url('api_lookup') }}?q={search_term_string}"
         },
         "query-input": "required name=search_term_string"
       }
@@ -78,11 +78,12 @@
                         <span class="legend-chip"><span class="legend-dot dot-both"></span>both</span>
                         <span class="legend-chip"><span class="legend-dot dot-wifi"></span>Wi-Fi</span>
                         <span class="legend-chip"><span class="legend-dot dot-bathroom"></span>bathroom</span>
+                        <span class="legend-chip"><span class="legend-dot dot-restroom"></span>public restroom</span>
                         <span class="legend-chip"><span class="legend-dot dot-empty"></span>nothing yet</span>
                     </span>
                 </li>
-                <li>Tap any pin to grab the codes — or add yours to a gray pin so the next person finds it.</li>
-                <li>Upvote codes that work. Downvote stale ones.</li>
+                <li>Tap any pin to grab the codes. Add yours to a gray pin so the next person finds it.</li>
+                <li>Tap <strong>Worked</strong> or <strong>Didn't work</strong> after you try a code. That keeps the codes fresh.</li>
             </ol>
 
             <div class="modal-footer">
@@ -108,7 +109,18 @@
                 <input type="text" id="search-input" placeholder="Search coffee shops...">
                 <span id="clear-search" style="cursor: pointer; color: red; font-weight: bold; margin-left: -25px; z-index: 2;">&times;</span>
             </div>
-            <div id="shop-list"></div>
+            <nav id="shop-list" aria-label="Shops with codes">
+                {# Server-rendered links so crawlers reach every shop page.
+                   app.js replaces this list once the map loads. #}
+                {% for shop in coded_shops %}
+                <a class="shop-list-item" href="{{ url_for('shop_detail', shop_id=shop.id, slug=shop.slug) }}" data-shop-id="{{ shop.id }}">
+                    <div class="shop-list-main">
+                        <b>{{ shop.name }}</b>
+                        <small>{{ shop.address }}</small>
+                    </div>
+                </a>
+                {% endfor %}
+            </nav>
         </div>
         <div id="map">
             <button id="find-me-button" title="Find my location">
@@ -119,6 +131,7 @@
                 <span class="legend-chip"><span class="legend-dot dot-both"></span>both</span>
                 <span class="legend-chip"><span class="legend-dot dot-wifi"></span>Wi-Fi</span>
                 <span class="legend-chip"><span class="legend-dot dot-bathroom"></span>bathroom</span>
+                <span class="legend-chip"><span class="legend-dot dot-restroom"></span>public restroom</span>
                 <span class="legend-chip legend-empty"><span class="legend-dot dot-empty"></span>nothing yet, add one!</span>
             </div>
             <button id="zoom-in-hint" type="button">Zoom in to add a code to a gray pin</button>
@@ -131,10 +144,18 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="{{ url_for('static', filename='app.js', v=version) }}"></script>
     <div id="toast"></div>
+    <div id="speed-card" role="dialog" aria-live="polite" hidden>
+        <p class="speed-card-text"></p>
+        <div class="speed-card-actions">
+            <button id="speed-card-run" class="lets-go-button">Test speed</button>
+            <button id="speed-card-dismiss" class="link-btn">Not now</button>
+        </div>
+    </div>
     
     <footer id="floating-footer">
         <div class="footer-content">
-            <a href="{{ url_for('shops_directory') }}" style="color:inherit;">Browse all shops</a>
+            <a href="{{ url_for('neighborhood_index') }}" style="color:inherit;">Neighborhoods</a>
+            &middot; <a href="{{ url_for('shops_directory') }}" style="color:inherit;">Browse all shops</a>
             &middot; © 2025 All rights reserved. Powered by Hunter Technologies
         </div>
     </footer>

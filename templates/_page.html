@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% endblock %}</title>
+    <meta name="description" content="{% block description %}{% endblock %}">
+    <link rel="canonical" href="{{ canonical }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo-toilet.png') }}">
+    <meta property="og:site_name" content="{{ site_name }}">
+    <meta property="og:url" content="{{ canonical }}">
+    <meta property="og:image" content="{{ abs_url('static', filename='logo-toilet.png') }}">
+    <meta name="twitter:card" content="summary">
+    {% block head %}{% endblock %}
+    <style>
+        :root {
+            color-scheme: light dark;
+            --text: #1f2328; --muted: #656d76; --link: #0a66c2; --line: #e3e3e3;
+            --chip-bg: #eef5ff; --chip-text: #0a4f99; --good: #0a7d2c;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --text: #e6edf3; --muted: #9da7b1; --link: #6cb6ff; --line: #30363d;
+                --chip-bg: #1c2a3d; --chip-text: #9cc8ff; --good: #56d364;
+            }
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+               max-width: 760px; margin: 0 auto; padding: 1rem 16px 4rem; line-height: 1.55;
+               color: var(--text); background: Canvas; }
+        a { color: var(--link); }
+        header.crumbs { font-size: .9rem; margin-bottom: 1rem; color: var(--muted); }
+        header.crumbs a { text-decoration: none; }
+        h1 { margin-bottom: .25rem; line-height: 1.25; }
+        h2 { margin-top: 2rem; border-bottom: 1px solid var(--line); padding-bottom: .25rem; }
+        .muted, .addr { color: var(--muted); }
+        .addr { margin-top: 0; }
+        ul.codes { list-style: none; padding: 0; }
+        ul.codes li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .75rem;
+                      padding: .5rem .75rem; border: 1px solid var(--line); border-radius: 8px; margin-bottom: .5rem; }
+        ul.codes code { font-size: 1.15rem; font-weight: 600; }
+        .votes { color: var(--muted); font-size: .85rem; margin-left: auto; }
+        .top { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em;
+               background: var(--link); color: Canvas; border-radius: 4px; padding: .1rem .4rem; }
+        .chips { display: flex; flex-wrap: wrap; gap: .4rem; padding: 0; list-style: none; }
+        .chips li { background: var(--chip-bg); color: var(--chip-text); border-radius: 999px;
+                    padding: .15rem .65rem; font-size: .85rem; }
+        ul.shops { list-style: none; padding: 0; }
+        ul.shops li { padding: .6rem .25rem; border-bottom: 1px solid var(--line); }
+        ul.shops a { text-decoration: none; font-weight: 600; }
+        ul.shops .addr { display: block; font-size: .85rem; font-weight: 400; margin: 0; }
+        .tags { font-size: .8rem; color: var(--good); }
+        .hoods { columns: 2; padding-left: 1.1rem; }
+        .note { font-size: .85rem; color: var(--muted); margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    {% block body %}{% endblock %}
+</body>
+</html>

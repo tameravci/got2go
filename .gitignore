@@ -5,3 +5,4 @@ app.db
 osm_coffee_shops_cache.json
 .venv/
 venv/
+osm_cache.json

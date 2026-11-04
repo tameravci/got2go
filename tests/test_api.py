@@ -113,3 +113,161 @@ def test_rate_limit_prunes_old_rows(client, monkeypatch):
     vote(client, 'upvote')
     with app.app_context():
         assert WriteEvent.query.filter(WriteEvent.ts == 0).count() == 0
+
+
+# ---- Freshness ---------------------------------------------------------
+
+def test_upvote_sets_last_confirmed(client):
+    w = wifi_votes(vote(client, 'upvote'))
+    assert w['last_confirmed_at'] is not None
+
+
+def test_suggest_sets_timestamps(client):
+    r = client.post('/api/suggest', json={
+        'shop_id': 2, 'item_type': 'wifi_passwords', 'item_value': 'latte42'})
+    w = r.get_json()['shop']['wifi_passwords'][0]
+    assert w['created_at'] and w['last_confirmed_at']
+
+
+# ---- Restrooms -----------------------------------------------------------
+
+def add_restroom():
+    with app.app_context():
+        db.session.add(CoffeeShop(id=4, name='Public restroom', address='Capitol Hill, Seattle, WA',
+                                  lat=47.6250, lng=-122.3200, category='restroom',
+                                  tags_json='{"amenity": "toilets", "wheelchair": "yes"}'))
+        db.session.commit()
+
+
+def test_restroom_shows_when_zoomed_out(client):
+    add_restroom()
+    r = client.get('/api/coffee_shops?has_codes=1')
+    assert ids(r) == [1, 4]
+    restroom = [s for s in r.get_json() if s['id'] == 4][0]
+    assert restroom['category'] == 'restroom'
+    assert restroom['tags']['wheelchair'] == 'yes'
+    assert restroom['neighborhood'] == 'Capitol Hill'
+
+
+# ---- SEO -----------------------------------------------------------------
+
+def test_canonical_is_https_apex_on_production_host(client):
+    r = client.get('/shops', base_url='http://got2gosea.com')
+    assert b'<link rel="canonical" href="https://got2gosea.com/shops">' in r.data
+    r = client.get('/sitemap.xml', base_url='http://www.got2gosea.com')
+    assert b'http://' not in r.data.replace(b'http://www.sitemaps.org', b'')
+
+
+def test_homepage_links_to_shop_pages(client):
+    r = client.get('/')
+    assert b'href="/shop/1/victrola"' in r.data
+    assert b'href="/shop/2/' not in r.data  # no codes, no link
+
+
+def test_shop_title_matches_search_pattern(client):
+    r = client.get('/shop/1/victrola')
+    assert b'<title>Victrola Wi-Fi password &amp; bathroom code (Capitol Hill, Seattle)' in r.data
+    assert b'worked' in r.data or b'votes' in r.data
+
+
+def test_neighborhood_pages(client):
+    add_restroom()
+    r = client.get('/seattle/capitol-hill')
+    assert r.status_code == 200
+    assert b'Victrola' in r.data and b'Public restroom' in r.data
+    assert client.get('/seattle/nowhere').status_code == 404
+    assert client.get('/seattle/ballard').status_code == 404  # no listed shops there
+    assert b'/seattle/capitol-hill' in client.get('/seattle').data
+    assert b'/seattle/capitol-hill' in client.get('/sitemap.xml').data
+
+
+# ---- Speed test ----------------------------------------------------------
+
+def speed(client, **overrides):
+    body = {'shop_id': 1, 'mbps': 42.5, 'ping_ms': 18, 'lat': 47.614, 'lng': -122.32}
+    body.update(overrides)
+    return client.post('/api/speedtest', json=body)
+
+
+def test_speed_test_saved_and_summarized(client):
+    r = speed(client)
+    assert r.status_code == 200
+    assert r.get_json()['wifi_speed']['mbps'] == 42.5
+    assert r.get_json()['wifi_speed']['tests'] == 1
+
+
+def test_speed_test_requires_being_at_shop(client):
+    assert speed(client, lat=47.70, lng=-122.32).status_code == 400
+
+
+def test_speed_test_once_per_hour(client):
+    assert speed(client).status_code == 200
+    assert speed(client).status_code == 409
+
+
+def test_speed_test_rejects_bad_numbers(client):
+    assert speed(client, mbps=-1).status_code == 400
+    assert speed(client, mbps='fast').status_code == 400
+
+
+def test_speed_download_size_capped(client):
+    r = client.post('/api/speedtest/download?mb=99')
+    assert len(r.data) == 5 * 1024 * 1024
+
+
+# ---- Schema upgrade ------------------------------------------------------
+
+def test_ensure_schema_adds_missing_columns(client):
+    from sqlalchemy import text
+    with app.app_context():
+        db.session.execute(text('DROP TABLE wifi_password'))
+        db.session.execute(text(
+            'CREATE TABLE wifi_password (id INTEGER PRIMARY KEY, password VARCHAR(100) NOT NULL, '
+            'votes INTEGER, coffee_shop_id INTEGER NOT NULL)'))
+        db.session.commit()
+        app_module.ensure_schema()
+        cols = {row[1] for row in db.session.execute(text('PRAGMA table_info(wifi_password)'))}
+        assert {'created_at', 'last_confirmed_at'} <= cols
+
+
+# ---- OSM sync ------------------------------------------------------------
+
+def test_osm_sync_links_adds_and_never_deletes(client):
+    import populate_db
+    elements = [
+        # Matches the existing Victrola row by name and position.
+        {'type': 'node', 'id': 1, 'lat': 47.6141, 'lon': -122.3201,
+         'tags': {'name': 'Victrola', 'amenity': 'cafe', 'addr:street': 'Pike St'}},
+        # A new cafe drawn as a building (way with a center point).
+        {'type': 'way', 'id': 2, 'center': {'lat': 47.62, 'lon': -122.31},
+         'tags': {'name': 'New Cafe', 'amenity': 'cafe'}},
+        # A public restroom with no name.
+        {'type': 'node', 'id': 3, 'lat': 47.6250, 'lon': -122.3200,
+         'tags': {'amenity': 'toilets', 'wheelchair': 'yes'}},
+        # A private toilet: skipped.
+        {'type': 'node', 'id': 4, 'lat': 47.6, 'lon': -122.3,
+         'tags': {'amenity': 'toilets', 'access': 'private'}},
+    ]
+    with app.app_context():
+        assert populate_db.sync(elements) == 0
+        assert db.session.get(CoffeeShop, 1).osm_id == 'node/1'
+        assert len(db.session.get(CoffeeShop, 1).wifi_passwords) == 1  # codes kept
+        assert CoffeeShop.query.filter_by(osm_id='way/2').one().name == 'New Cafe'
+        restroom = CoffeeShop.query.filter_by(osm_id='node/3').one()
+        assert (restroom.category, restroom.address) == ('restroom', 'Capitol Hill, Seattle, WA')
+        assert CoffeeShop.query.filter_by(osm_id='node/4').count() == 0
+        assert db.session.get(CoffeeShop, 3) is not None  # not in OSM, still kept
+
+        # A second run with the same data changes nothing.
+        before = CoffeeShop.query.count()
+        assert populate_db.sync(elements) == 0
+        assert CoffeeShop.query.count() == before
+
+
+def test_osm_sync_refuses_tiny_response(client):
+    import populate_db
+    with app.app_context():
+        for i in (1, 2, 3):
+            db.session.get(CoffeeShop, i).osm_id = f'node/{i}'
+        db.session.commit()
+        assert populate_db.sync([]) == 1

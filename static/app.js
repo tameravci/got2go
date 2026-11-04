@@ -29,6 +29,7 @@ function escapeHtml(unsafe) {
 }
 
 function shopPinClass(shop) {
+    if (shop.category === 'restroom') return 'pin pin-restroom';
     const hasWifi = shop.wifi_passwords && shop.wifi_passwords.length > 0;
     const hasBathroom = shop.bathroom_codes && shop.bathroom_codes.length > 0;
     if (hasWifi && hasBathroom) return 'pin pin-both';
@@ -52,78 +53,198 @@ function shopIcon(shop) {
     });
 }
 
+// "today", "3 days ago" ... for an ISO timestamp from the API.
+function timeAgo(isoString) {
+    if (!isoString) return '';
+    const days = Math.floor((Date.now() - Date.parse(isoString)) / 86400000);
+    if (days < 1) return 'today';
+    if (days < 2) return 'yesterday';
+    if (days < 45) return `${days} days ago`;
+    if (days < 365) return `${Math.floor(days / 30)} months ago`;
+    const years = Math.floor(days / 365);
+    return `${years} year${years > 1 ? 's' : ''} ago`;
+}
+
+// Same labels as feature_labels() in app.py.
+function featureLabels(tags) {
+    tags = tags || {};
+    const out = [];
+    const wheelchair = tags.wheelchair || tags['toilets:wheelchair'];
+    if (wheelchair === 'yes') out.push('♿ Accessible');
+    else if (wheelchair === 'limited') out.push('♿ Limited access');
+    if (tags.changing_table === 'yes') out.push('🚼 Changing table');
+    if (tags.unisex === 'yes' || tags.gender_segregated === 'no') out.push('All-gender');
+    if (tags.fee === 'yes') out.push('Fee');
+    else if (tags.fee === 'no') out.push('Free');
+    if (tags.access === 'customers' || tags['toilets:access'] === 'customers') out.push('Customers only');
+    if (tags.opening_hours) out.push(`🕒 ${tags.opening_hours}`);
+    return out;
+}
+
+// ---- "Did it work?" memory ------------------------------------------------
+// When someone copies a code, remember it. The next time they open that
+// shop, ask whether the code worked. The answer is an upvote or downvote.
+const COPIED_KEY = 'got2go.copied';
+const ASK_AFTER_MS = 3 * 60 * 1000;
+const FORGET_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+function readJson(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || {}; } catch (e) { return {}; }
+}
+function writeJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* storage off */ }
+}
+function rememberCopy(shopId, itemType, itemId) {
+    const copied = readJson(COPIED_KEY);
+    copied[`${shopId}:${itemType}:${itemId}`] = Date.now();
+    writeJson(COPIED_KEY, copied);
+}
+function forgetCopy(shopId, itemType, itemId) {
+    const copied = readJson(COPIED_KEY);
+    delete copied[`${shopId}:${itemType}:${itemId}`];
+    writeJson(COPIED_KEY, copied);
+}
+
+// The copied code at this shop that we should ask about, or null.
+function pendingQuestion(shop) {
+    const copied = readJson(COPIED_KEY);
+    const now = Date.now();
+    for (const itemType of ['bathroom_codes', 'wifi_passwords']) {
+        for (const item of shop[itemType] || []) {
+            const ts = copied[`${shop.id}:${itemType}:${item.id}`];
+            if (!ts) continue;
+            if (now - ts > FORGET_AFTER_MS || item.user_vote) {
+                forgetCopy(shop.id, itemType, item.id);
+            } else if (now - ts > ASK_AFTER_MS) {
+                return { itemType, item };
+            }
+        }
+    }
+    return null;
+}
+
+function codeRow(shop, itemType, item) {
+    const value = itemType === 'wifi_passwords' ? item.password : item.code;
+    const ids = `data-shop="${shop.id}" data-type="${itemType}" data-item="${item.id}"`;
+    const up = item.user_vote === 'upvote' ? 'voted-up' : '';
+    const down = item.user_vote === 'downvote' ? 'voted-down' : '';
+    const fresh = item.last_confirmed_at
+        ? `<span class="code-fresh">worked ${timeAgo(item.last_confirmed_at)}</span>` : '';
+    return `
+        <div class="popup-row">
+            <code class="${itemType === 'wifi_passwords' ? 'popup-password' : 'popup-code'}">${escapeHtml(value)}</code>
+            <button class="copy-button" aria-label="Copy" data-action="copy" data-value="${escapeHtml(value)}" ${ids}>📋</button>
+            <span class="vote-count" title="votes">${item.votes}</span>
+            <button class="vote-btn ${up}" data-action="vote" data-vote="upvote" ${ids}>✓ Worked</button>
+            <button class="vote-btn ${down}" data-action="vote" data-vote="downvote" ${ids}>✗ Didn't</button>
+            ${fresh}
+        </div>`;
+}
+
+function codeSection(shop, itemType, title) {
+    const items = (shop[itemType] || []).filter(i => i.votes > -3);
+    let html = `<hr><h5>${title}</h5>`;
+    if (itemType === 'wifi_passwords' && shop.wifi_speed) {
+        const sp = shop.wifi_speed;
+        html += `<div class="speed-badge">⚡ ${sp.mbps} Mbps <small>(${sp.tests} test${sp.tests > 1 ? 's' : ''})</small></div>`;
+    }
+    html += items.length
+        ? items.map(i => codeRow(shop, itemType, i)).join('')
+        : `<p class="popup-none">None yet.</p>`;
+
+    const inputId = `${itemType}-suggestion-${shop.id}`;
+    const attrs = itemType === 'bathroom_codes'
+        ? `placeholder="New code (digits, *, #)" inputmode="tel" maxlength="12" data-filter="code"`
+        : `placeholder="New password" maxlength="16"`;
+    html += `
+        <div class="suggestion-form">
+            <input type="text" id="${inputId}" ${attrs}>
+            <button class="suggest-btn" data-action="suggest" data-shop="${shop.id}" data-type="${itemType}" data-input="${inputId}">Add</button>
+        </div>`;
+    if (itemType === 'wifi_passwords') {
+        html += `<button class="link-btn" data-action="speedtest" data-shop="${shop.id}">⚡ Test this Wi-Fi's speed</button>`;
+    }
+    return html;
+}
+
 function createPopupContent(shop) {
-    const hasAnything =
-        (shop.wifi_passwords && shop.wifi_passwords.length > 0) ||
-        (shop.bathroom_codes && shop.bathroom_codes.length > 0);
-
+    const isRestroom = shop.category === 'restroom';
     let content = `<div class="popup-header"><b>${escapeHtml(shop.name)}</b><br><small>${escapeHtml(shop.address || '')}</small></div>`;
-    if (!hasAnything) {
-        content += `<div class="popup-empty-callout">No codes here yet — be the first to add one!</div>`;
+
+    const labels = featureLabels(shop.tags);
+    if (labels.length) {
+        content += `<div class="popup-chips">${labels.map(l => `<span>${escapeHtml(l)}</span>`).join('')}</div>`;
     }
 
-    content += `<hr><h5>Bathroom codes</h5>`;
-    const filteredBathroom = shop.bathroom_codes.filter(code => code.votes > -3);
-    if (filteredBathroom.length > 0) {
-        filteredBathroom.forEach(code => {
-            const upvoteClass = code.user_vote === 'upvote' ? 'voted-up' : '';
-            const downvoteClass = code.user_vote === 'downvote' ? 'voted-down' : '';
-            content += `
-                <div class="popup-row">
-                    <code class="popup-code">${escapeHtml(code.code)}</code>
-                    <span class="vote-count">${code.votes >= 0 ? '▲' : '▽'} ${code.votes}</span>
-                    <button class="vote-btn ${upvoteClass}" aria-label="Upvote" onclick="handleVote(${shop.id}, 'bathroom_codes', 'upvote', ${code.id})">👍</button>
-                    <button class="vote-btn ${downvoteClass}" aria-label="Downvote" onclick="handleVote(${shop.id}, 'bathroom_codes', 'downvote', ${code.id})">👎</button>
-                </div>`;
-        });
-    } else {
-        content += `<p class="popup-none">None yet.</p>`;
+    const question = pendingQuestion(shop);
+    if (question) {
+        const value = question.item.password || question.item.code;
+        const ids = `data-shop="${shop.id}" data-type="${question.itemType}" data-item="${question.item.id}"`;
+        content += `
+            <div class="did-it-work">
+                Did <code>${escapeHtml(value)}</code> work last time?
+                <div>
+                    <button data-action="answer" data-vote="upvote" ${ids}>✓ Yes</button>
+                    <button data-action="answer" data-vote="downvote" ${ids}>✗ No</button>
+                    <button data-action="answer" data-vote="" ${ids}>Not sure</button>
+                </div>
+            </div>`;
+    } else if (!isRestroom && !hasCodes(shop)) {
+        content += `<div class="popup-empty-callout">No codes here yet. Be the first to add one!</div>`;
     }
 
-    content += `
-        <div class="suggestion-form">
-            <input type="text" id="bathroom-suggestion-${shop.id}" placeholder="New code (digits, *, #)" pattern="[0-9*#]+" oninput="this.value = this.value.replace(/[^0-9*#]/g, '');" maxlength="12">
-            <button class="suggest-btn" onclick="suggest(${shop.id}, 'bathroom_codes', 'bathroom-suggestion-${shop.id}')">Add</button>
-        </div>
-    `;
-
-    content += `<hr><h5>Wi-Fi passwords</h5>`;
-    const filteredWifi = shop.wifi_passwords.filter(wifi => wifi.votes > -3);
-    if (filteredWifi.length > 0) {
-        filteredWifi.forEach(wifi => {
-            const upvoteClass = wifi.user_vote === 'upvote' ? 'voted-up' : '';
-            const downvoteClass = wifi.user_vote === 'downvote' ? 'voted-down' : '';
-            content += `
-                <div class="popup-row">
-                    <code class="popup-password">${escapeHtml(wifi.password)}</code>
-                    <span class="vote-count">${wifi.votes >= 0 ? '▲' : '▽'} ${wifi.votes}</span>
-                    <button class="copy-button" aria-label="Copy password" onclick="copyToClipboard('${escapeHtml(wifi.password).replace(/'/g, "\\'")}')">📋</button>
-                    <button class="vote-btn ${upvoteClass}" aria-label="Upvote" onclick="handleVote(${shop.id}, 'wifi_passwords', 'upvote', ${wifi.id})">👍</button>
-                    <button class="vote-btn ${downvoteClass}" aria-label="Downvote" onclick="handleVote(${shop.id}, 'wifi_passwords', 'downvote', ${wifi.id})">👎</button>
-                </div>`;
-        });
-    } else {
-        content += `<p class="popup-none">None yet.</p>`;
-    }
-
-    content += `
-        <div class="suggestion-form">
-            <input type="text" id="wifi-suggestion-${shop.id}" placeholder="New password" maxlength="16">
-            <button class="suggest-btn" onclick="suggest(${shop.id}, 'wifi_passwords', 'wifi-suggestion-${shop.id}')">Add</button>
-        </div>
-    `;
-
+    content += codeSection(shop, 'bathroom_codes', isRestroom ? 'Door codes' : 'Bathroom codes');
+    if (!isRestroom) content += codeSection(shop, 'wifi_passwords', 'Wi-Fi passwords');
+    if (shop.url) content += `<a class="popup-page-link" href="${shop.url}">Details &amp; share</a>`;
     return content;
 }
 
+// One click handler for every popup button (data-action="...").
+document.addEventListener('click', function (event) {
+    const el = event.target.closest('[data-action]');
+    if (!el) return;
+    const shopId = Number(el.dataset.shop);
+    const itemId = Number(el.dataset.item);
+    const itemType = el.dataset.type;
+    switch (el.dataset.action) {
+        case 'copy':
+            copyToClipboard(el.dataset.value);
+            rememberCopy(shopId, itemType, itemId);
+            if (itemType === 'wifi_passwords') armSpeedPrompt(shopId);
+            break;
+        case 'vote':
+            forgetCopy(shopId, itemType, itemId);
+            handleVote(shopId, itemType, el.dataset.vote, itemId);
+            break;
+        case 'answer':
+            forgetCopy(shopId, itemType, itemId);
+            if (el.dataset.vote) handleVote(shopId, itemType, el.dataset.vote, itemId);
+            else refreshMarker(shopId);
+            break;
+        case 'suggest':
+            suggest(shopId, itemType, el.dataset.input);
+            break;
+        case 'speedtest':
+            runSpeedTest(shopId);
+            break;
+    }
+});
+
+// Bathroom codes: digits, * and # only.
+document.addEventListener('input', function (event) {
+    if (event.target.dataset && event.target.dataset.filter === 'code') {
+        event.target.value = event.target.value.replace(/[^0-9*#]/g, '');
+    }
+});
+
 function shopCounts(shop) {
+    const parts = [];
+    if (shop.category === 'restroom') parts.push(`<span class="count-pill count-restroom">🚻 public</span>`);
     const w = (shop.wifi_passwords || []).length;
     const b = (shop.bathroom_codes || []).length;
-    if (w === 0 && b === 0) return '';
-    const parts = [];
     if (w > 0) parts.push(`<span class="count-pill count-wifi">📶 ${w}</span>`);
-    if (b > 0) parts.push(`<span class="count-pill count-bathroom">🚻 ${b}</span>`);
-    return `<div class="shop-counts">${parts.join(' ')}</div>`;
+    if (b > 0) parts.push(`<span class="count-pill count-bathroom">🔢 ${b}</span>`);
+    return parts.length ? `<div class="shop-counts">${parts.join(' ')}</div>` : '';
 }
 
 function hasCodes(shop) {
@@ -140,8 +261,8 @@ function rememberShops(shops) {
 function sortForSidebar(shops) {
     const ref = userLatLng || map.getCenter();
     const dist = s => haversineDistance(ref.lat, ref.lng, s.lat, s.lng);
-    return shops.slice().sort((a, b) =>
-        (hasCodes(b) - hasCodes(a)) || (dist(a) - dist(b)));
+    const rank = s => (hasCodes(s) ? 2 : 0) + (s.category === 'restroom' ? 1 : 0);
+    return shops.slice().sort((a, b) => (rank(b) - rank(a)) || (dist(a) - dist(b)));
 }
 
 function populateSidebar(shopsToDisplay, emptyMessage) {
@@ -155,8 +276,10 @@ function populateSidebar(shopsToDisplay, emptyMessage) {
     }
 
     shopsToDisplay.slice(0, MAX_SIDEBAR_ITEMS).forEach(function (shop) {
-        const listItem = document.createElement('div');
+        // A real link, so "open in new tab" and crawlers work too.
+        const listItem = document.createElement('a');
         listItem.className = 'shop-list-item';
+        listItem.href = shop.url;
         listItem.innerHTML = `
             <div class="shop-list-main">
                 <b>${escapeHtml(shop.name)}</b>
@@ -164,7 +287,11 @@ function populateSidebar(shopsToDisplay, emptyMessage) {
             </div>
             ${shopCounts(shop)}
         `;
-        listItem.onclick = () => focusShop(shop.id);
+        listItem.onclick = (event) => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+            event.preventDefault();
+            focusShop(shop.id);
+        };
         shopListDiv.appendChild(listItem);
     });
 }
@@ -414,6 +541,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.getElementById('find-me-button').addEventListener('click', () => locateUser(true));
 
+    document.getElementById('speed-card-run').addEventListener('click', () =>
+        runSpeedTest(Number(document.getElementById('speed-card').dataset.shop)));
+    document.getElementById('speed-card-dismiss').addEventListener('click', hideSpeedCard);
+
     map.on('locationfound', function(e) {
         userLatLng = e.latlng;
         if (userLocationLayer) {
@@ -437,6 +568,123 @@ document.addEventListener('DOMContentLoaded', function () {
         if (locateFromButton) showToast(e.message);
     });
 });
+
+// ---- Wi-Fi speed test -----------------------------------------------------
+// After someone copies a Wi-Fi password, they leave to join the network in
+// their phone settings. When they come back to the app, offer a short test.
+const SPEED_PROMPT_KEY = 'got2go.speedPrompt';
+const SPEED_PROMPT_MIN_MS = 5 * 1000;        // they had time to join the Wi-Fi
+const SPEED_PROMPT_MAX_MS = 30 * 60 * 1000;  // the offer expires
+const SPEED_MAX_DISTANCE_M = 200;            // same limit as the server
+let speedTestRunning = false;
+
+function armSpeedPrompt(shopId) {
+    writeJson(SPEED_PROMPT_KEY, { shopId, ts: Date.now() });
+}
+
+function maybeOfferSpeedTest() {
+    const pending = readJson(SPEED_PROMPT_KEY);
+    if (!pending.shopId) return;
+    const age = Date.now() - pending.ts;
+    if (age < SPEED_PROMPT_MIN_MS) return;
+    writeJson(SPEED_PROMPT_KEY, {});
+    if (age > SPEED_PROMPT_MAX_MS) return;
+    const shop = shopsById.get(pending.shopId);
+    if (shop) showSpeedCard(shop);
+}
+
+function showSpeedCard(shop) {
+    const card = document.getElementById('speed-card');
+    card.querySelector('.speed-card-text').innerHTML =
+        `On the <b>${escapeHtml(shop.name)}</b> Wi-Fi now? Test its speed. It takes about 5 seconds.`;
+    card.dataset.shop = shop.id;
+    card.hidden = false;
+}
+
+function hideSpeedCard() {
+    document.getElementById('speed-card').hidden = true;
+}
+
+// Resolve with the user's position. Ask the browser if we do not have it.
+function currentPosition() {
+    if (userLatLng) return Promise.resolve(userLatLng);
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timeout')), 15000);
+        map.once('locationfound', e => { clearTimeout(timer); resolve(e.latlng); });
+        map.once('locationerror', e => { clearTimeout(timer); reject(e); });
+        map.locate({ setView: false });
+    });
+}
+
+async function downloadOnce(mb) {
+    const start = performance.now();
+    const res = await fetch(`${API_BASE_URL}/api/speedtest/download?mb=${mb}`,
+                            { method: 'POST', cache: 'no-store' });
+    if (!res.ok) throw new Error((await res.json()).error || 'Speed test failed.');
+    const bytes = (await res.arrayBuffer()).byteLength;
+    return { bytes, secs: (performance.now() - start) / 1000 };
+}
+
+// Ping three times and keep the best. Download 1 MB; if that is quick,
+// download 5 MB for a steadier number.
+async function measureSpeed() {
+    const pings = [];
+    for (let i = 0; i < 3; i++) {
+        const start = performance.now();
+        await fetch(`${API_BASE_URL}/api/ping?t=${Date.now()}`, { cache: 'no-store' });
+        pings.push(performance.now() - start);
+    }
+    let result = await downloadOnce(1);
+    if (result.secs < 1.5) result = await downloadOnce(5);
+    return {
+        mbps: Math.round((result.bytes * 8 / result.secs / 1e6) * 10) / 10,
+        ping_ms: Math.round(Math.min(...pings)),
+    };
+}
+
+async function runSpeedTest(shopId) {
+    if (speedTestRunning) return;
+    const shop = shopsById.get(shopId);
+    if (!shop) return;
+    hideSpeedCard();
+
+    let here;
+    try {
+        here = await currentPosition();
+    } catch (e) {
+        showToast('The speed test needs your location to confirm you are at the shop.');
+        return;
+    }
+    if (haversineDistance(here.lat, here.lng, shop.lat, shop.lng) * 1609.34 > SPEED_MAX_DISTANCE_M) {
+        showToast(`Go to ${escapeHtml(shop.name)} and join its Wi-Fi to test it.`);
+        return;
+    }
+
+    speedTestRunning = true;
+    showToast('Testing Wi-Fi speed…');
+    try {
+        const { mbps, ping_ms } = await measureSpeed();
+        const res = await fetch(`${API_BASE_URL}/api/speedtest`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shop_id: shopId, mbps, ping_ms, lat: here.lat, lng: here.lng }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        rememberShops([data]);
+        refreshMarker(shopId);
+        showToast(`Wi-Fi speed: ${mbps} Mbps, ${ping_ms} ms ping. Thanks!`);
+    } catch (e) {
+        showToast(e.message || 'Speed test failed.');
+    } finally {
+        speedTestRunning = false;
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') maybeOfferSpeedTest();
+});
+window.addEventListener('online', maybeOfferSpeedTest);
 
 function showToast(message) {
     var toast = document.getElementById("toast");
@@ -506,7 +754,7 @@ function suggest(shopId, itemType, inputId) {
             rememberShops([data.shop]);
             refreshMarker(shopId);
             document.getElementById(inputId).value = '';
-            showToast('Added — thanks!');
+            showToast('Added. Thanks!');
         }
     });
 }
